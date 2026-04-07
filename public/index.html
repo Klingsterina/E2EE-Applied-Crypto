@@ -1,21 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>E2EE Chat</title>
-    <link rel="stylesheet" href="styles.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="style.css" />
+  <title>E2EE Applied Crypto</title>
 </head>
 <body>
-    <h1>E2EE Chat</h1>
+  <main class="container">
+    <h1>E2EE Applied Crypto</h1>
 
-    <input id="username" placeholder="username" />
-    <input id="room" placeholder="room" />
-    <button id="join-btn">Join</button>
-    <p id="status"></p>
+    <section class="join">
+      <h2>Join a Room</h2>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="socket.js"></script>
-    <script src="app.js"></script>
+      <div class="field">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" placeholder="Enter your name" />
+      </div>
+
+      <div class="field">
+        <label for="code">Join Code</label>
+        <input type="text" id="code" name="code" placeholder="Enter room code" />
+      </div>
+
+      <button id="join">Join</button>
+    </section>
+
+    <section class="create">
+      <h2>Create a Room</h2>
+      <button id="create">Create Room</button>
+    </section>
+  </main>
 </body>
 </html>
