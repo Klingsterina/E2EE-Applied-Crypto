@@ -1,7 +1,7 @@
-const path = require('path');
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
+const path = require("path");
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
@@ -9,18 +9,18 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, "public")));
 
-app.get('/health', (_req, res) => {
+app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-io.on('connection', (socket) => {
+io.on("connection", (socket) => {
   console.log(`Socket connected: ${socket.id}`);
 
-  socket.on('join-room', ({ roomId, username }) => {
+  socket.on("join-room", ({ roomId, username }) => {
     if (!roomId || !username) {
-      socket.emit('error-message', 'roomId and username are required.');
+      socket.emit("error-message", "roomId and username are required.");
       return;
     }
 
@@ -28,12 +28,12 @@ io.on('connection', (socket) => {
     const roomSize = room ? room.size : 0;
 
     if (socket.data.roomId === roomId) {
-      socket.emit('error-message', 'Already joined this room.');
+      socket.emit("error-message", "Already joined this room.");
       return;
     }
 
     if (roomSize >= 2 && (!room || !room.has(socket.id))) {
-      socket.emit('room-full');
+      socket.emit("room-full");
       return;
     }
 
@@ -41,7 +41,7 @@ io.on('connection', (socket) => {
     socket.data.roomId = roomId;
     socket.data.username = username;
 
-    socket.emit('joined-room', {
+    socket.emit("joined-room", {
       roomId,
       username,
       socketId: socket.id,
@@ -50,7 +50,7 @@ io.on('connection', (socket) => {
     console.log(`${username} joined room ${roomId}`);
   });
 
-  socket.on('disconnect', () => {
+  socket.on("disconnect", () => {
     console.log(`Socket disconnected: ${socket.id}`);
   });
 });
