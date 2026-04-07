@@ -1,0 +1,13 @@
+{
+  "name": "e2ee-applied-crypto",
+  "version": "1.0.0",
+  "description": "E2EE messaging application",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "5.2.1"
+  }
+}
