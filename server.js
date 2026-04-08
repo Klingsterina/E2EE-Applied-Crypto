@@ -47,10 +47,24 @@ io.on("connection", (socket) => {
       socketId: socket.id,
     });
 
+    socket.to(roomId).emit("user-joined", {
+      socketId: socket.id,
+      username,
+    });
+
     console.log(`${username} joined room ${roomId}`);
   });
 
   socket.on("disconnect", () => {
+    const { roomId, username } = socket.data || {};
+
+    if (roomId) {
+      socket.to(roomId).emit("user-left", {
+        socketId: socket.id,
+        username,
+      });
+    }
+
     console.log(`Socket disconnected: ${socket.id}`);
   });
 });
