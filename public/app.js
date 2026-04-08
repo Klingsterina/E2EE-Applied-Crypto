@@ -6,21 +6,32 @@ const statusText = document.getElementById("status");
 let currentRoom = null;
 let hasJoined = false;
 
+function setStatus(message) {
+  if (!statusText) return;
+  statusText.textContent = message;
+}
+
 joinBtn.addEventListener("click", () => {
-  const username = usernameInput?.value;
-  const roomId = roomInput?.value;
+  const username = usernameInput?.value.trim();
+  const roomId = roomInput?.value.trim();
 
   if (!username || !roomId) {
     console.log("Username and room are required");
-    statusText.textContent = "Username and room are required.";
+    setStatus("Username and room are required.");
     return;
   }
 
-  if (hasJoined) {
-    statusText.textContent = "You already joined this room.";
+  if (hasJoined && currentRoom === roomId) {
+    setStatus("You already joined this room.");
     return;
   }
 
+  if (hasJoined && currentRoom !== roomId) {
+    setStatus("You are already in a room.");
+    return;
+  }
+
+  setStatus("Joining room...");
   socket.emit("join-room", { roomId, username });
 });
 
@@ -28,13 +39,12 @@ socket.on("joined-room", async ({ roomId, username }) => {
   try {
     hasJoined = true;
     currentRoom = roomId;
-    joinBtn.disabled = true;
 
-    statusText.textContent = "Joined room. Generating ECDH keys...";
+    setStatus("Joined room. Generating ECDH keys...");
 
     const { publicKey } = await window.e2eeCrypto.generateECDHKeyPair();
 
-    statusText.textContent = "ECDH keys ready.";
+    setStatus("ECDH keys ready.");
 
     console.log("Joined room:", roomId);
     console.log("Username:", username);
@@ -44,22 +54,26 @@ socket.on("joined-room", async ({ roomId, username }) => {
     socket.emit("public-key", { roomId, username, publicKey });
   } catch (error) {
     console.error("ECDH generation failed:", error);
-    statusText.textContent = "Failed to generate ECDH keys.";
+    setStatus("Failed to generate ECDH keys.");
   }
 });
 
 socket.on("user-joined", ({ username }) => {
   console.log(`${username} joined the room`);
+  setStatus(`${username} joined the room`);
 });
 
 socket.on("user-left", ({ username }) => {
   console.log(`${username} left the room`);
+  setStatus(`${username} left the room`);
 });
 
 socket.on("room-full", () => {
-  console.log("Room is full");
+  console.log("Room is full.");
+  setStatus("Room is full.");
 });
 
 socket.on("error-message", (msg) => {
   console.log("Error:", msg);
+  setStatus("Something went wrong. Please try again.");
 });
