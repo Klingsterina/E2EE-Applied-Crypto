@@ -7,8 +7,8 @@ let currentRoom = null;
 let hasJoined = false;
 
 joinBtn.addEventListener("click", () => {
-  const username = document.getElementById("username").value;
-  const roomId = document.getElementById("room").value;
+  const username = usernameInput?.value;
+  const roomId = roomInput?.value;
 
   if (!username || !roomId) {
     console.log("Username and room are required");
@@ -38,8 +38,6 @@ socket.on("joined-room", async ({ roomId, username }) => {
     console.log("Joined room:", roomId);
     console.log("Username:", username);
     console.log("ECDH key pair generated");
-
-    statusText.textContent = "ECDH keys ready.";
 
     // task #9:
     socket.emit("public-key", { roomId, username, publicKey });
