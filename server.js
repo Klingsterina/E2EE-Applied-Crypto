@@ -65,6 +65,7 @@ io.on("connection", (socket) => {
       });
     }
 
+    console.log(`${username} left room ${roomId}`);
     console.log(`Socket disconnected: ${socket.id}`);
   });
 });

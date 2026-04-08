@@ -12,6 +12,7 @@ joinBtn.addEventListener("click", () => {
 
   if (!username || !roomId) {
     console.log("Username and room are required");
+    statusText.textContent = "Username and room are required.";
     return;
   }
 
@@ -45,6 +46,14 @@ socket.on("joined-room", async ({ roomId, username }) => {
     console.error("ECDH generation failed:", error);
     statusText.textContent = "Failed to generate ECDH keys.";
   }
+});
+
+socket.on("user-joined", ({ username }) => {
+  console.log(`${username} joined the room`);
+});
+
+socket.on("user-left", ({ username }) => {
+  console.log(`${username} left the room`);
 });
 
 socket.on("room-full", () => {
