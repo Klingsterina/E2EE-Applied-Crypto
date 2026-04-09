@@ -1,6 +1,8 @@
 let ecdhKeyPair = null;
 let exportedPublicKey = null;
 let sharedSecretBase64 = null;
+let sessionKey = null;
+let exportedSessionKey = null;
 
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
@@ -92,6 +94,51 @@ async function deriveSharedSecret(peerPublicKeyBase64) {
   };
 }
 
+async function deriveSessionKeyFromSharedSecret(sharedSecretBits, roomId) {
+  const hkdfKeyMaterial = await window.crypto.subtle.importKey(
+    "raw",
+    sharedSecretBits,
+    "HKDF",
+    false,
+    ["deriveKey"],
+  );
+
+  const salt = new TextEncoder().encode(roomId);
+  const info = new TextEncoder().encode("e2ee-chat-session-key");
+
+  sessionKey = await window.crypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt,
+      info,
+    },
+    hkdfKeyMaterial,
+    {
+      name: "AES-GCM",
+      length: 256,
+    },
+    true,
+    ["encrypt", "decrypt"],
+  );
+
+  const rawSessionKey = await window.crypto.subtle.exportKey("raw", sessionKey);
+  exportedSessionKey = arrayBufferToBase64(rawSessionKey);
+
+  console.log("Session key derived with HKDF");
+  console.log("Session key:", exportedSessionKey);
+
+  return {
+    sessionKey,
+    sessionKeyBase64: exportedSessionKey,
+  };
+}
+
+async function deriveSharedSessionKey(peerPublicKeyBase64, roomId) {
+  const { sharedSecretBits } = await deriveSharedSecret(peerPublicKeyBase64);
+  return deriveSessionKeyFromSharedSecret(sharedSecretBits, roomId);
+}
+
 function getECDHKeyPair() {
   return ecdhKeyPair;
 }
@@ -104,11 +151,23 @@ function getSharedSecret() {
   return sharedSecretBase64;
 }
 
+function getSessionKey() {
+  return sessionKey;
+}
+
+function getExportedSessionKey() {
+  return exportedSessionKey;
+}
+
 window.e2eeCrypto = {
   generateECDHKeyPair,
   importPeerPublicKey,
   deriveSharedSecret,
+  deriveSessionKeyFromSharedSecret,
+  deriveSharedSessionKey,
   getECDHKeyPair,
   getPublicKey,
   getSharedSecret,
+  getSessionKey,
+  getExportedSessionKey,
 };
