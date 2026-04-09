@@ -90,3 +90,23 @@ button:hover {
     color: rgb(195, 192, 192);
     font-size: 0.95rem;
 }
+
+.hidden {
+  display: none !important;
+}
+
+#message-panel {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+#send-btn {
+  width: 100%;
+}
+
+.secure-session {
+  outline: 3px solid #22c55e;
+  outline-offset: -3px;
+}
