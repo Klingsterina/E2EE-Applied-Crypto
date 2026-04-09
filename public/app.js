@@ -6,6 +6,7 @@ const statusText = document.getElementById("status");
 let currentRoom = null;
 let hasJoined = false;
 let peerPublicKey = null;
+let secureSessionReady = false;
 
 function setStatus(message) {
   if (!statusText) return;
@@ -40,7 +41,6 @@ socket.on("joined-room", async ({ roomId, username }) => {
   try {
     hasJoined = true;
     currentRoom = roomId;
-    joinBtn.disabled = true;
 
     setStatus("Joined room. Generating ECDH keys...");
 
@@ -59,23 +59,44 @@ socket.on("joined-room", async ({ roomId, username }) => {
   }
 });
 
-socket.on("peer-public-key", ({ username, publicKey }) => {
-  peerPublicKey = publicKey;
+socket.on("peer-public-key", async ({ username, publicKey }) => {
+  try {
+    peerPublicKey = publicKey;
 
-  console.log("Received peer public key from:", username);
-  console.log("Peer public key:", publicKey);
+    console.log("Received peer public key from:", username);
+    console.log("Peer public key:", peerPublicKey);
 
-  setStatus(`Received peer public key from ${username}.`);
+    setStatus(
+      `Received peer public key from ${username}. Deriving session key...`,
+    );
+
+    const { sessionKeyBase64 } = await window.e2eeCrypto.deriveSharedSessionKey(
+      peerPublicKey,
+      currentRoom,
+    );
+
+    secureSessionReady = true;
+
+    console.log("Secure session ready:", secureSessionReady);
+    console.log("Derived session key:", sessionKeyBase64);
+
+    setStatus("Session secure.");
+    document.body.classList.add("secure-session");
+  } catch (error) {
+    console.error("Failed to derive shared session key:", error);
+    setStatus("Failed to derive secure session.");
+  }
 });
 
 socket.on("user-joined", ({ username }) => {
   console.log(`${username} joined the room`);
-  setStatus(`${username} joined the room`);
 });
 
 socket.on("user-left", ({ username }) => {
   console.log(`${username} left the room`);
-  setStatus(`${username} left the room`);
+  secureSessionReady = false;
+  document.body.classList.remove("secure-session");
+  setStatus(`${username} left the room.`);
 });
 
 socket.on("room-full", () => {
