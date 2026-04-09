@@ -1,46 +1,38 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>E2EE Chat</title>
-    <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>E2EE Chat</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-    <main class="container">
-        <h1>E2EE Chat</h1>
+  <main class="container">
+    <section id="join-screen" class="screen">
+      <h1>E2EE Chat</h1>
 
-        <section class="card">
-            <h2>Join a Room</h2>
+      <div class="card">
+        <h2>Join a Room</h2>
 
-            <div class="field">
-                <label for="username">Username</label>
-                <input id="username" type="text" placeholder="Enter username" />
-            </div>
-
-            <div class="field">
-                <label for="room">Room Code</label>
-                <input id="room" type="text" placeholder="Enter room code" />
-            </div>
-
-            <button id="join-btn">Join</button>
-            <p id="status"></p>
-        </section>
-        <div id="message-panel" class="hidden">
-            <label for="message-input">Message</label>
-            <input
-                id="message-input"
-                type="text"
-                placeholder="Type a message"
-                autocomplete="off"
-            />
-            <button id="send-btn" type="button">Send encrypted message</button>
+        <div class="field">
+          <label for="username">Username</label>
+          <input id="username" type="text" placeholder="Enter your username" />
         </div>
-    </main>
+
+        <div class="field">
+          <label for="room">Room Code</label>
+          <input id="room" type="text" placeholder="Enter room code" />
+        </div>
+
+        <button id="join-btn" type="button">Join</button>
+        <p id="status" class="status-text"></p>
+      </div>
+    </section>
+  </main>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="socket.js"></script>
     <script src="crypto.js"></script>
-    <script src="app.js"></script>
+    <script src="join.js"></script>
 </body>
 </html>

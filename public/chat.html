@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Secure Chat Room</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="container">
+    <section id="chat-screen" class="screen">
+      <div class="chat-layout">
+        <header class="chat-header">
+          <div>
+            <h1 class="chat-title">Secure Chat</h1>
+            <p class="chat-subtitle">
+              Room: <span id="chat-room">-</span>
+            </p>
+          </div>
+
+          <div class="chat-header-right">
+            <p class="chat-user">You: <span id="chat-username">-</span></p>
+            <span id="chat-status-badge" class="chat-status connecting">Connecting</span>
+          </div>
+        </header>
+
+        <section id="chat-messages" class="chat-messages">
+          <div class="empty-state" id="empty-state">
+            No messages yet. Start the conversation.
+          </div>
+        </section>
+
+        <form id="chat-form" class="chat-composer">
+          <input
+            id="chat-input"
+            type="text"
+            placeholder="Write a message..."
+            autocomplete="off"
+          />
+          <button id="chat-send-btn" type="submit">Send</button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="socket.js"></script>
+  <script src="crypto.js"></script>
+  <script src="chat.js"></script>
+</body>
+</html>
