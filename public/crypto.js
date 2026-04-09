@@ -139,6 +139,36 @@ async function deriveSharedSessionKey(peerPublicKeyBase64, roomId) {
   return deriveSessionKeyFromSharedSecret(sharedSecretBits, roomId);
 }
 
+async function encryptMessage(plaintext) {
+  if (!sessionKey) {
+    throw new Error("Session key not ready.");
+  }
+
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const encodedMessage = new TextEncoder().encode(plaintext);
+
+  const ciphertextBuffer = await window.crypto.subtle.encrypt(
+    {
+      name: "AES-GCM",
+      iv,
+    },
+    sessionKey,
+    encodedMessage,
+  );
+
+  const ciphertext = arrayBufferToBase64(ciphertextBuffer);
+  const ivBase64 = arrayBufferToBase64(iv.buffer);
+
+  console.log("Message encrypted with AES-GCM");
+  console.log("Generated IV:", ivBase64);
+  console.log("Ciphertext:", ciphertext);
+
+  return {
+    ciphertext,
+    iv: ivBase64,
+  };
+}
+
 function getECDHKeyPair() {
   return ecdhKeyPair;
 }
@@ -165,6 +195,7 @@ window.e2eeCrypto = {
   deriveSharedSecret,
   deriveSessionKeyFromSharedSecret,
   deriveSharedSessionKey,
+  encryptMessage,
   getECDHKeyPair,
   getPublicKey,
   getSharedSecret,
