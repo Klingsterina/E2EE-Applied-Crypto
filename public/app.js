@@ -36,7 +36,6 @@ async function deriveSessionFromPeer(username, publicKey) {
   console.log("Derived session key:", sessionKeyBase64);
 
   setStatus("Session secure.");
-  document.body.classList.add("secure-session");
 }
 
 joinBtn.addEventListener("click", () => {
@@ -120,7 +119,6 @@ socket.on("user-left", ({ username }) => {
   secureSessionReady = false;
   localKeyReady = false;
   pendingPeerKeyPayload = null;
-  document.body.classList.remove("secure-session");
   setStatus(`${username} left the room.`);
 });
 
