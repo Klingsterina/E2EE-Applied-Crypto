@@ -7,10 +7,36 @@ let currentRoom = null;
 let hasJoined = false;
 let peerPublicKey = null;
 let secureSessionReady = false;
+let localKeyReady = false;
+let pendingPeerKeyPayload = null;
 
 function setStatus(message) {
   if (!statusText) return;
   statusText.textContent = message;
+}
+
+async function deriveSessionFromPeer(username, publicKey) {
+  peerPublicKey = publicKey;
+
+  console.log("Received peer public key from:", username);
+  console.log("Peer public key:", peerPublicKey);
+
+  setStatus(
+    `Received peer public key from ${username}. Deriving session key...`,
+  );
+
+  const { sessionKeyBase64 } = await window.e2eeCrypto.deriveSharedSessionKey(
+    peerPublicKey,
+    currentRoom,
+  );
+
+  secureSessionReady = true;
+
+  console.log("Secure session ready:", secureSessionReady);
+  console.log("Derived session key:", sessionKeyBase64);
+
+  setStatus("Session secure.");
+  document.body.classList.add("secure-session");
 }
 
 joinBtn.addEventListener("click", () => {
@@ -45,6 +71,7 @@ socket.on("joined-room", async ({ roomId, username }) => {
     setStatus("Joined room. Generating ECDH keys...");
 
     const { publicKey } = await window.e2eeCrypto.generateECDHKeyPair();
+    localKeyReady = true;
 
     console.log("Joined room:", roomId);
     console.log("Username:", username);
@@ -53,6 +80,14 @@ socket.on("joined-room", async ({ roomId, username }) => {
     setStatus("ECDH keys ready. Sending public key...");
 
     socket.emit("public-key", { roomId, username, publicKey });
+
+    if (pendingPeerKeyPayload) {
+      const { username: peerUsername, publicKey: pendingPublicKey } =
+        pendingPeerKeyPayload;
+
+      pendingPeerKeyPayload = null;
+      await deriveSessionFromPeer(peerUsername, pendingPublicKey);
+    }
   } catch (error) {
     console.error("ECDH generation failed:", error);
     setStatus("Failed to generate ECDH keys.");
@@ -61,27 +96,15 @@ socket.on("joined-room", async ({ roomId, username }) => {
 
 socket.on("peer-public-key", async ({ username, publicKey }) => {
   try {
-    peerPublicKey = publicKey;
+    if (!localKeyReady) {
+      pendingPeerKeyPayload = { username, publicKey };
+      setStatus(
+        `Received peer public key from ${username}. Waiting for local key...`,
+      );
+      return;
+    }
 
-    console.log("Received peer public key from:", username);
-    console.log("Peer public key:", peerPublicKey);
-
-    setStatus(
-      `Received peer public key from ${username}. Deriving session key...`,
-    );
-
-    const { sessionKeyBase64 } = await window.e2eeCrypto.deriveSharedSessionKey(
-      peerPublicKey,
-      currentRoom,
-    );
-
-    secureSessionReady = true;
-
-    console.log("Secure session ready:", secureSessionReady);
-    console.log("Derived session key:", sessionKeyBase64);
-
-    setStatus("Session secure.");
-    document.body.classList.add("secure-session");
+    await deriveSessionFromPeer(username, publicKey);
   } catch (error) {
     console.error("Failed to derive shared session key:", error);
     setStatus("Failed to derive secure session.");
@@ -95,6 +118,8 @@ socket.on("user-joined", ({ username }) => {
 socket.on("user-left", ({ username }) => {
   console.log(`${username} left the room`);
   secureSessionReady = false;
+  localKeyReady = false;
+  pendingPeerKeyPayload = null;
   document.body.classList.remove("secure-session");
   setStatus(`${username} left the room.`);
 });
