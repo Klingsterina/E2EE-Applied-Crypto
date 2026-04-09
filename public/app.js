@@ -5,6 +5,7 @@ const statusText = document.getElementById("status");
 
 let currentRoom = null;
 let hasJoined = false;
+let peerPublicKey = null;
 
 function setStatus(message) {
   if (!statusText) return;
@@ -39,23 +40,32 @@ socket.on("joined-room", async ({ roomId, username }) => {
   try {
     hasJoined = true;
     currentRoom = roomId;
+    joinBtn.disabled = true;
 
     setStatus("Joined room. Generating ECDH keys...");
 
     const { publicKey } = await window.e2eeCrypto.generateECDHKeyPair();
 
-    setStatus("ECDH keys ready.");
-
     console.log("Joined room:", roomId);
     console.log("Username:", username);
-    console.log("ECDH key pair generated");
+    console.log("My public key:", publicKey);
 
-    // task #9:
+    setStatus("ECDH keys ready. Sending public key...");
+
     socket.emit("public-key", { roomId, username, publicKey });
   } catch (error) {
     console.error("ECDH generation failed:", error);
     setStatus("Failed to generate ECDH keys.");
   }
+});
+
+socket.on("peer-public-key", ({ username, publicKey }) => {
+  peerPublicKey = publicKey;
+
+  console.log("Received peer public key from:", username);
+  console.log("Peer public key:", publicKey);
+
+  setStatus(`Received peer public key from ${username}.`);
 });
 
 socket.on("user-joined", ({ username }) => {
@@ -75,5 +85,5 @@ socket.on("room-full", () => {
 
 socket.on("error-message", (msg) => {
   console.log("Error:", msg);
-  setStatus("Something went wrong. Please try again.");
+  setStatus(msg);
 });

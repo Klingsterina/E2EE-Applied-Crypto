@@ -55,6 +55,44 @@ io.on("connection", (socket) => {
     console.log(`${username} joined room ${roomId}`);
   });
 
+  socket.on("public-key", ({ roomId, username, publicKey }) => {
+    if (!roomId || !username || !publicKey) {
+      socket.emit(
+        "error-message",
+        "roomId, username and publicKey are required.",
+      );
+      return;
+    }
+
+    socket.data.roomId = roomId;
+    socket.data.username = username;
+    socket.data.publicKey = publicKey;
+
+    console.log(`Received public key from ${username} in room ${roomId}`);
+
+    socket.to(roomId).emit("peer-public-key", {
+      username,
+      publicKey,
+    });
+
+    const room = io.sockets.adapter.rooms.get(roomId);
+
+    if (!room) return;
+
+    for (const peerSocketId of room) {
+      if (peerSocketId === socket.id) continue;
+
+      const peerSocket = io.sockets.sockets.get(peerSocketId);
+
+      if (peerSocket?.data?.publicKey) {
+        socket.emit("peer-public-key", {
+          username: peerSocket.data.username,
+          publicKey: peerSocket.data.publicKey,
+        });
+      }
+    }
+  });
+
   socket.on("disconnect", () => {
     const { roomId, username } = socket.data || {};
 
