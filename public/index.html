@@ -26,6 +26,16 @@
             <button id="join-btn">Join</button>
             <p id="status"></p>
         </section>
+        <div id="message-panel" class="hidden">
+            <label for="message-input">Message</label>
+            <input
+                id="message-input"
+                type="text"
+                placeholder="Type a message"
+                autocomplete="off"
+            />
+            <button id="send-btn" type="button">Send encrypted message</button>
+        </div>
     </main>
 
     <script src="/socket.io/socket.io.js"></script>
