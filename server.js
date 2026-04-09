@@ -93,6 +93,30 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on(
+    "send-encrypted-message",
+    ({ roomId, username, ciphertext, iv }) => {
+      if (!roomId || !username || !ciphertext || !iv) {
+        socket.emit(
+          "error-message",
+          "roomId, username, ciphertext and iv are required.",
+        );
+        return;
+      }
+
+      if (socket.data.roomId !== roomId) {
+        socket.emit("error-message", "You are not in this room.");
+        return;
+      }
+
+      console.log(
+        `Encrypted message received from ${username} in room ${roomId}`,
+      );
+      console.log("Ciphertext:", ciphertext);
+      console.log("IV:", iv);
+    },
+  );
+
   socket.on("disconnect", () => {
     const { roomId, username } = socket.data || {};
 
