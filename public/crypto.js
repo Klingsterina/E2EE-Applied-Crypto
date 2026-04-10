@@ -169,6 +169,26 @@ async function encryptMessage(plaintext) {
   };
 }
 
+async function decryptMessage(ciphertextBase64, ivBase64) {
+  if (!sessionKey) {
+    throw new Error("Session key not ready.");
+  }
+
+  const ciphertextBuffer = base64ToArrayBuffer(ciphertextBase64);
+  const ivBuffer = base64ToArrayBuffer(ivBase64);
+
+  const plaintextBuffer = await window.crypto.subtle.decrypt(
+    {
+      name: "AES-GCM",
+      iv: new Uint8Array(ivBuffer),
+    },
+    sessionKey,
+    ciphertextBuffer,
+  );
+
+  return new TextDecoder().decode(plaintextBuffer);
+}
+
 function getECDHKeyPair() {
   return ecdhKeyPair;
 }
@@ -196,6 +216,7 @@ window.e2eeCrypto = {
   deriveSessionKeyFromSharedSecret,
   deriveSharedSessionKey,
   encryptMessage,
+  decryptMessage,
   getECDHKeyPair,
   getPublicKey,
   getSharedSecret,
