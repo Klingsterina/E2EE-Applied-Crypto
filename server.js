@@ -95,8 +95,17 @@ io.on("connection", (socket) => {
 
   socket.on(
     "send-encrypted-message",
-    ({ roomId, username, ciphertext, iv }) => {
-      if (!roomId || !username || !ciphertext || !iv) {
+    ({ roomId, username, ciphertext, iv } = {}) => {
+      if (
+        typeof roomId !== "string" ||
+        typeof username !== "string" ||
+        typeof ciphertext !== "string" ||
+        typeof iv !== "string" ||
+        !roomId.trim() ||
+        !username.trim() ||
+        !ciphertext.trim() ||
+        !iv.trim()
+      ) {
         socket.emit(
           "error-message",
           "roomId, username, ciphertext and iv are required.",
@@ -109,11 +118,12 @@ io.on("connection", (socket) => {
         return;
       }
 
-      console.log(
-        `Encrypted message received from ${username} in room ${roomId}`,
-      );
-      console.log("Ciphertext:", ciphertext);
-      console.log("IV:", iv);
+      socket.to(roomId).emit("receive-encrypted-message", {
+        username,
+        ciphertext,
+        iv,
+      });
+      console.log("[relay] encrypted message forwarded");
     },
   );
 
@@ -127,7 +137,9 @@ io.on("connection", (socket) => {
       });
     }
 
-    console.log(`${username} left room ${roomId}`);
+    if (username && roomId) {
+      console.log("[presence] user left room");
+    }
     console.log(`Socket disconnected: ${socket.id}`);
   });
 });

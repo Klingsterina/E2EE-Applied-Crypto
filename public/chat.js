@@ -192,12 +192,35 @@ socket.on("room-full", () => {
   });
 });
 
+
 socket.on("error-message", (msg) => {
   appendMessage({
     sender: "System",
     text: msg,
     type: "theirs",
   });
+});
+
+socket.on("receive-encrypted-message", async ({ username, ciphertext, iv }) => {
+  try {
+    console.log("Received encrypted payload:", { username, ciphertext, iv });
+
+    const plaintext = await window.e2eeCrypto.decryptMessage(ciphertext, iv);
+
+    appendMessage({
+      sender: username,
+      text: plaintext,
+      type: "theirs",
+    });
+  } catch (error) {
+    console.error("Failed to decrypt incoming message:", error);
+
+    appendMessage({
+      sender: "System",
+      text: "Failed to decrypt incoming message.",
+      type: "theirs",
+    });
+  }
 });
 
 chatForm?.addEventListener("submit", async (event) => {
