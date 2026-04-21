@@ -9,6 +9,7 @@ const emptyState = document.getElementById("empty-state");
 const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 const chatSendBtn = document.getElementById("chat-send-btn");
+const leaveRoomBtn = document.getElementById("leave-room-btn");
 
 const localFingerprintText = document.getElementById("local-fingerprint");
 const peerFingerprintText = document.getElementById("peer-fingerprint");
@@ -180,7 +181,7 @@ function setSystemStatusMessage(text) {
 
   if (!systemStatusRow) {
     systemStatusRow = document.createElement("div");
-    systemStatusRow.className = "message-row theirs";
+    systemStatusRow.className = "message-row system";
 
     const bubble = document.createElement("div");
     bubble.className = "message-bubble";
@@ -316,7 +317,7 @@ socket.on("user-joined", ({ username }) => {
   appendMessage({
     sender: "System",
     text: `${username} joined the room.`,
-    type: "theirs",
+    type: "system",
   });
 });
 
@@ -327,7 +328,7 @@ socket.on("user-left", async ({ username }) => {
   appendMessage({
     sender: "System",
     text: `${username} left the room.`,
-    type: "theirs",
+    type: "system",
   });
 
   secureSessionReady = false;
@@ -343,7 +344,7 @@ socket.on("room-full", () => {
   appendMessage({
     sender: "System",
     text: "Room is full.",
-    type: "theirs",
+    type: "system",
   });
 });
 
@@ -365,7 +366,7 @@ socket.on("error-message", (msg) => {
   appendMessage({
     sender: "System",
     text: msg,
-    type: "theirs",
+    type: "system",
   });
 });
 
@@ -384,9 +385,25 @@ socket.on("receive-encrypted-message", async ({ username, ciphertext, iv }) => {
     appendMessage({
       sender: "System",
       text: "Failed to decrypt incoming message.",
-      type: "theirs",
+      type: "system",
     });
   }
+});
+
+leaveRoomBtn?.addEventListener("click", () => {
+  sessionStorage.removeItem("chatRoomId");
+
+  secureSessionReady = false;
+  localKeyReady = false;
+  pendingPeerKeyPayload = null;
+  lastDerivedPeerKey = null;
+
+  if (chatInput) {
+    chatInput.value = "";
+  }
+
+  socket.disconnect();
+  window.location.href = "/";
 });
 
 chatForm?.addEventListener("submit", async (event) => {

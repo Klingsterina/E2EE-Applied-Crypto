@@ -295,6 +295,19 @@ button:disabled {
   flex-shrink: 0;
 }
 
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.chat-header-actions .secondary-action {
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+
 .identity-panel {
   width: 100%;
   display: grid;
@@ -430,6 +443,24 @@ button:disabled {
   justify-content: flex-start;
 }
 
+.message-row.system {
+  justify-content: center;
+}
+
+.message-row.system .message-bubble {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 12px;
+  max-width: 70%;
+  text-align: center;
+}
+
+.message-row.system .message-meta {
+  display: none;
+}
+
 .message-bubble {
   max-width: 75%;
   padding: 0.8rem 0.9rem;
@@ -537,6 +568,11 @@ button:disabled {
     align-items: flex-start;
   }
 
+  .chat-header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
   .chat-status {
     min-width: 0;
   }
@@ -586,6 +622,10 @@ button:disabled {
 
   .chat-header-right {
     align-items: flex-start;
+  }
+
+  .chat-header-actions {
+    justify-content: flex-start;
   }
 }
 
