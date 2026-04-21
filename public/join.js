@@ -168,6 +168,41 @@ importKeyFileInput?.addEventListener("change", async (event) => {
   event.target.value = "";
 });
 
+createRoomBtn?.addEventListener("click", () => {
+  const username = usernameInput?.value.trim();
+
+  if (!username) {
+    setStatus("Username is required.");
+    return;
+  }
+
+  if (!hasIdentityKey) {
+    setStatus("You must generate or import an identity key before creating a room.");
+    return;
+  }
+
+  setStatus("Generating secure room code...");
+  socket.emit("create-room");
+});
+
+socket.on("room-created", ({ roomId }) => {
+  const username = usernameInput?.value.trim();
+
+  if (!username) {
+    setStatus("Username is required.");
+    return;
+  }
+
+  sessionStorage.setItem("chatUsername", username);
+  sessionStorage.setItem("chatRoomId", roomId);
+
+  if (roomInput) {
+    roomInput.value = roomId;
+  }
+
+  window.location.href = "/chat.html";
+});
+
 joinBtn?.addEventListener("click", () => {
   const username = usernameInput?.value.trim();
   const roomId = roomInput?.value.trim();
