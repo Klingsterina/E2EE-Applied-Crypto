@@ -21,6 +21,43 @@ let lastDerivedPeerKey = null;
 let systemStatusRow = null;
 let lastJoinedRoomId = null;
 
+async function renderLocalIdentity(publicKey) {
+  if (!localFingerprintText) return;
+
+  if (!publicKey) {
+    localFingerprintText.textContent = "Unavailable";
+    return;
+  }
+
+  const fingerprint =
+    await window.e2eeCrypto.getPublicKeyFingerprint(publicKey);
+
+  localFingerprintText.textContent = fingerprint;
+}
+
+async function renderPeerIdentity(username, publicKey) {
+  if (!peerFingerprintText) return;
+
+  if (!publicKey) {
+    peerFingerprintText.textContent = "Waiting for peer key...";
+
+    if (peerUsernameText) {
+      peerUsernameText.textContent = "";
+    }
+
+    return;
+  }
+
+  const fingerprint =
+    await window.e2eeCrypto.getPublicKeyFingerprint(publicKey);
+
+  if (peerUsernameText) {
+    peerUsernameText.textContent = username || "Peer";
+  }
+
+  peerFingerprintText.textContent = fingerprint;
+}
+
 async function ensureIdentityKeyReady() {
   const existingPublicKey = window.e2eeCrypto.getPublicKey();
 
