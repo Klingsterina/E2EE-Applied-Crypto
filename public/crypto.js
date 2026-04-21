@@ -64,7 +64,10 @@ function normalizeImportedKeyBundle(bundleInput) {
 
 function openIdentityDb() {
   return new Promise((resolve, reject) => {
-    const request = window.indexedDB.open(IDENTITY_DB_NAME, IDENTITY_DB_VERSION);
+    const request = window.indexedDB.open(
+      IDENTITY_DB_NAME,
+      IDENTITY_DB_VERSION,
+    );
 
     request.onupgradeneeded = () => {
       const db = request.result;
@@ -151,6 +154,22 @@ async function clearPersistedIdentityKeyPair() {
   });
 
   db.close();
+}
+
+async function getPublicKeyFingerprint(publicKeyBase64 = exportedPublicKey) {
+  if (!publicKeyBase64) {
+    throw new Error("Public key not available.");
+  }
+
+  const digest = await window.crypto.subtle.digest(
+    "SHA-256",
+    base64ToArrayBuffer(publicKeyBase64),
+  );
+
+  return [...new Uint8Array(digest)]
+    .slice(0, 16)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join(":");
 }
 
 async function derivePassphraseWrappingKey(passphrase, saltBuffer) {
@@ -567,4 +586,5 @@ window.e2eeCrypto = {
   getSharedSecret,
   getSessionKey,
   getExportedSessionKey,
+  getPublicKeyFingerprint,
 };

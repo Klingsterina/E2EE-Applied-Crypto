@@ -10,6 +10,10 @@ const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 const chatSendBtn = document.getElementById("chat-send-btn");
 
+const localFingerprintText = document.getElementById("local-fingerprint");
+const peerFingerprintText = document.getElementById("peer-fingerprint");
+const peerUsernameText = document.getElementById("peer-identity-username");
+
 let secureSessionReady = false;
 let localKeyReady = false;
 let pendingPeerKeyPayload = null;
@@ -23,6 +27,7 @@ async function ensureIdentityKeyReady() {
   if (existingPublicKey) {
     return existingPublicKey;
   }
+
   const persistedIdentity =
     await window.e2eeCrypto.loadPersistedIdentityKeyPair();
 
@@ -139,10 +144,7 @@ function setComposerEnabled(enabled) {
 }
 
 async function deriveSessionFromPeer(username, publicKey) {
-  const { sessionKeyBase64 } = await window.e2eeCrypto.deriveSharedSessionKey(
-    publicKey,
-    currentRoom,
-  );
+  await window.e2eeCrypto.deriveSharedSessionKey(publicKey, currentRoom);
 
   secureSessionReady = true;
   lastDerivedPeerKey = publicKey;
@@ -180,8 +182,10 @@ socket.on("joined-room", async ({ roomId, username }) => {
 
     setChatStatus("connecting");
     setComposerEnabled(false);
+    await renderPeerIdentity("", null);
 
     const publicKey = await ensureIdentityKeyReady();
+    await renderLocalIdentity(publicKey);
     localKeyReady = true;
 
     const isRejoiningSameRoom = lastJoinedRoomId === roomId;
@@ -204,6 +208,7 @@ socket.on("joined-room", async ({ roomId, username }) => {
         pendingPeerKeyPayload;
 
       pendingPeerKeyPayload = null;
+      await renderPeerIdentity(peerUsername, pendingPublicKey);
       await deriveSessionFromPeer(peerUsername, pendingPublicKey);
     }
   } catch (error) {
@@ -229,14 +234,9 @@ socket.on("peer-public-key", async ({ username, publicKey }) => {
       return;
     }
 
-    appendMessage({
-      sender: "System",
-      text: `${username} is already in the room. Establishing secure session...`,
-      type: "theirs",
-    });
-
     setSystemStatusMessage("Peer key received. Establishing secure session...");
 
+    await renderPeerIdentity(username, publicKey);
     await deriveSessionFromPeer(username, publicKey);
   } catch (error) {
     console.error("Failed to derive shared session key:", error);
@@ -251,7 +251,9 @@ socket.on("user-joined", ({ username }) => {
   });
 });
 
-socket.on("user-left", ({ username }) => {
+socket.on("user-left", async ({ username }) => {
+  await renderPeerIdentity("", null);
+
   appendMessage({
     sender: "System",
     text: `${username} left the room.`,
@@ -275,11 +277,13 @@ socket.on("room-full", () => {
   });
 });
 
-socket.on("disconnect", () => {
+socket.on("disconnect", async () => {
   secureSessionReady = false;
   localKeyReady = false;
   pendingPeerKeyPayload = null;
   lastDerivedPeerKey = null;
+
+  await renderPeerIdentity("", null);
 
   setChatStatus("connecting");
   setComposerEnabled(false);

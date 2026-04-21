@@ -22,6 +22,15 @@
             <p class="chat-user">You: <span id="chat-username">-</span></p>
             <span id="chat-status-badge" class="chat-status connecting">Connecting</span>
           </div>
+
+          <div class="identity-panel">
+            <p><strong>Your fingerprint:</strong> <code id="local-fingerprint">Loading...</code></p>
+            <p>
+              <strong>Peer fingerprint:</strong>
+              <span id="peer-identity-username"></span>
+              <code id="peer-fingerprint">Waiting for peer key...</code>
+            </p>
+          </div>
         </header>
 
         <section id="chat-messages" class="chat-messages">

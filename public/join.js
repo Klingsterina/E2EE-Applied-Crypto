@@ -9,6 +9,8 @@ const roomInput = document.getElementById("room");
 const createRoomBtn = document.getElementById("create-room-btn");
 const joinBtn = document.getElementById("join-btn");
 const statusText = document.getElementById("status");
+const identityFingerprintText = document.getElementById("identity-fingerprint");
+const identityPublicKeyText = document.getElementById("identity-public-key");
 
 const ROOM_ID_REGEX = /^[A-Za-z0-9_-]{22}$/;
 
@@ -35,6 +37,31 @@ if (savedRoomId && roomInput) {
 
 let hasIdentityKey = false;
 
+async function renderIdentityInfo(publicKey) {
+  if (!publicKey) {
+    if (identityFingerprintText) {
+      identityFingerprintText.textContent = "No identity key loaded";
+    }
+
+    if (identityPublicKeyText) {
+      identityPublicKeyText.textContent = "";
+    }
+
+    return;
+  }
+
+  const fingerprint =
+    await window.e2eeCrypto.getPublicKeyFingerprint(publicKey);
+
+  if (identityFingerprintText) {
+    identityFingerprintText.textContent = fingerprint;
+  }
+
+  if (identityPublicKeyText) {
+    identityPublicKeyText.textContent = publicKey;
+  }
+}
+
 async function initializeIdentityKeyState() {
   sessionStorage.removeItem("identityKeyBundle");
 
@@ -45,6 +72,7 @@ async function initializeIdentityKeyState() {
     if (!persistedIdentity?.publicKey) {
       sessionStorage.removeItem("identityPublicKey");
       sessionStorage.removeItem("identityKeyLoaded");
+      await renderIdentityInfo(null);
       return;
     }
 
@@ -53,11 +81,14 @@ async function initializeIdentityKeyState() {
 
     sessionStorage.setItem("identityPublicKey", persistedIdentity.publicKey);
     sessionStorage.setItem("identityKeyLoaded", "true");
+
+    await renderIdentityInfo(persistedIdentity.publicKey);
     setKeyStatus("Identity key loaded from this browser.");
   } catch (err) {
     console.error(err);
     sessionStorage.removeItem("identityPublicKey");
     sessionStorage.removeItem("identityKeyLoaded");
+    await renderIdentityInfo(null);
     setKeyStatus("Failed to load saved identity key.");
   }
 }
@@ -71,10 +102,15 @@ generateKeyBtn?.addEventListener("click", async () => {
     const { publicKey } = await window.e2eeCrypto.generateECDHKeyPair();
 
     hasIdentityKey = true;
-    downloadKeyBtn.disabled = false;
+    if (downloadKeyBtn) {
+      downloadKeyBtn.disabled = false;
+    }
 
     sessionStorage.setItem("identityPublicKey", publicKey);
     sessionStorage.setItem("identityKeyLoaded", "true");
+
+    await renderIdentityInfo(publicKey);
+
     setKeyStatus(
       "Identity key generated and stored in this browser. You can now download an encrypted backup.",
     );
@@ -177,7 +213,9 @@ createRoomBtn?.addEventListener("click", () => {
   }
 
   if (!hasIdentityKey) {
-    setStatus("You must generate or import an identity key before creating a room.");
+    setStatus(
+      "You must generate or import an identity key before creating a room.",
+    );
     return;
   }
 
