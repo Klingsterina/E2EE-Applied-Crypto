@@ -13,6 +13,7 @@ const chatSendBtn = document.getElementById("chat-send-btn");
 const localFingerprintText = document.getElementById("local-fingerprint");
 const peerFingerprintText = document.getElementById("peer-fingerprint");
 const peerUsernameText = document.getElementById("peer-identity-username");
+const peerFingerprintStatusText = document.getElementById("peer-fingerprint-status");
 
 let secureSessionReady = false;
 let localKeyReady = false;
@@ -20,6 +21,15 @@ let pendingPeerKeyPayload = null;
 let lastDerivedPeerKey = null;
 let systemStatusRow = null;
 let lastJoinedRoomId = null;
+
+function getPeerFingerprintStorageKey() {
+  return `knownPeerFingerprint:${currentRoom}`;
+}
+
+function setPeerFingerprintStatus(text) {
+  if (!peerFingerprintStatusText) return;
+  peerFingerprintStatusText.textContent = text;
+}
 
 async function renderLocalIdentity(publicKey) {
   if (!localFingerprintText) return;
@@ -40,6 +50,7 @@ async function renderPeerIdentity(username, publicKey) {
 
   if (!publicKey) {
     peerFingerprintText.textContent = "Waiting for peer key...";
+    setPeerFingerprintStatus("");
 
     if (peerUsernameText) {
       peerUsernameText.textContent = "";
@@ -51,11 +62,31 @@ async function renderPeerIdentity(username, publicKey) {
   const fingerprint =
     await window.e2eeCrypto.getPublicKeyFingerprint(publicKey);
 
+  const storageKey = getPeerFingerprintStorageKey();
+  const knownFingerprint = localStorage.getItem(storageKey);
+
+  let fingerprintStatus = "New peer key";
+
+  if (!knownFingerprint) {
+    localStorage.setItem(storageKey, fingerprint);
+  } else if (knownFingerprint === fingerprint) {
+    fingerprintStatus = "Known peer key";
+  } else {
+    fingerprintStatus = "Warning: peer key changed";
+
+    appendMessage({
+      sender: "System",
+      text: "Warning: peer key changed for this room. Verify the fingerprint out of band.",
+      type: "theirs",
+    });
+  }
+
   if (peerUsernameText) {
     peerUsernameText.textContent = username || "Peer";
   }
 
   peerFingerprintText.textContent = fingerprint;
+  setPeerFingerprintStatus(fingerprintStatus);
 }
 
 async function ensureIdentityKeyReady() {
@@ -220,6 +251,7 @@ socket.on("joined-room", async ({ roomId, username }) => {
     setChatStatus("connecting");
     setComposerEnabled(false);
     await renderPeerIdentity("", null);
+    setPeerFingerprintStatus("");
 
     const publicKey = await ensureIdentityKeyReady();
     await renderLocalIdentity(publicKey);
@@ -290,6 +322,7 @@ socket.on("user-joined", ({ username }) => {
 
 socket.on("user-left", async ({ username }) => {
   await renderPeerIdentity("", null);
+  setPeerFingerprintStatus("");
 
   appendMessage({
     sender: "System",
@@ -321,6 +354,7 @@ socket.on("disconnect", async () => {
   lastDerivedPeerKey = null;
 
   await renderPeerIdentity("", null);
+  setPeerFingerprintStatus("");
 
   setChatStatus("connecting");
   setComposerEnabled(false);
