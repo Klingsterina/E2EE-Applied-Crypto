@@ -72,7 +72,6 @@ function scheduleRoomDeletionIfEmpty(roomId) {
 
     if (!room || room.size === 0) {
       issuedRooms.delete(roomId);
-      console.log(`Deleted empty room ${roomId}`);
     }
 
     pendingRoomDeletions.delete(roomId);
@@ -82,8 +81,6 @@ function scheduleRoomDeletionIfEmpty(roomId) {
 }
 
 io.on("connection", (socket) => {
-  console.log(`Socket connected: ${socket.id}`);
-
   socket.on("create-room", () => {
     let roomId;
 
@@ -190,8 +187,6 @@ io.on("connection", (socket) => {
       socketId: socket.id,
       username: normalizedUsername,
     });
-
-    console.log(`${normalizedUsername} joined room ${normalizedRoomId}`);
   });
 
   socket.on("public-key", ({ roomId, publicKey } = {}) => {
@@ -214,10 +209,6 @@ io.on("connection", (socket) => {
     }
 
     socket.data.publicKey = normalizedPublicKey;
-
-    console.log(
-      `Received public key from ${socket.data.username} in room ${normalizedRoomId}`,
-    );
 
     socket.to(normalizedRoomId).emit("peer-public-key", {
       username: socket.data.username,
@@ -267,8 +258,6 @@ io.on("connection", (socket) => {
       ciphertext: ciphertext.trim(),
       iv: iv.trim(),
     });
-
-    console.log("[relay] encrypted message forwarded");
   });
 
   socket.on("disconnecting", () => {
@@ -280,10 +269,6 @@ io.on("connection", (socket) => {
         username,
       });
     }
-
-    if (username && roomId) {
-      console.log("[presence] user left room");
-    }
   });
 
   socket.on("disconnect", () => {
@@ -292,8 +277,6 @@ io.on("connection", (socket) => {
     if (roomId) {
       scheduleRoomDeletionIfEmpty(roomId);
     }
-
-    console.log(`Socket disconnected: ${socket.id}`);
   });
 });
 

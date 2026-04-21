@@ -272,9 +272,6 @@ async function generateECDHKeyPair() {
   resetDerivedSessionState();
   await persistIdentityKeyPair(ecdhKeyPair, exportedPublicKey);
 
-  console.log("ECDH key pair generated");
-  console.log("Public key:", exportedPublicKey);
-
   return {
     publicKey: exportedPublicKey,
     keyPair: ecdhKeyPair,
@@ -346,9 +343,6 @@ async function importIdentityKeyBundle(bundleInput) {
   exportedPublicKey = arrayBufferToBase64(rawPublicKey);
   resetDerivedSessionState();
   await persistIdentityKeyPair(ecdhKeyPair, exportedPublicKey);
-
-  console.log("ECDH identity key bundle imported");
-  console.log("Public key:", exportedPublicKey);
 
   return {
     publicKey: exportedPublicKey,
@@ -441,9 +435,6 @@ async function deriveSharedSecret(peerPublicKeyBase64) {
 
   sharedSecretBase64 = arrayBufferToBase64(sharedSecretBits);
 
-  console.log("Shared secret derived");
-  console.log("Shared secret:", sharedSecretBase64);
-
   return {
     sharedSecretBits,
     sharedSecretBase64,
@@ -481,9 +472,6 @@ async function deriveSessionKeyFromSharedSecret(sharedSecretBits, roomId) {
   const rawSessionKey = await window.crypto.subtle.exportKey("raw", sessionKey);
   exportedSessionKey = arrayBufferToBase64(rawSessionKey);
 
-  console.log("Session key derived with HKDF");
-  console.log("Session key:", exportedSessionKey);
-
   return {
     sessionKey,
     sessionKeyBase64: exportedSessionKey,
@@ -514,10 +502,6 @@ async function encryptMessage(plaintext) {
 
   const ciphertext = arrayBufferToBase64(ciphertextBuffer);
   const ivBase64 = arrayBufferToBase64(iv.buffer);
-
-  console.log("Message encrypted with AES-GCM");
-  console.log("Generated IV:", ivBase64);
-  console.log("Ciphertext:", ciphertext);
 
   return {
     ciphertext,
