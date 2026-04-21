@@ -121,9 +121,6 @@ function setComposerEnabled(enabled) {
 }
 
 async function deriveSessionFromPeer(username, publicKey) {
-  console.log("Received peer public key from:", username);
-  console.log("Peer public key:", publicKey);
-
   const { sessionKeyBase64 } = await window.e2eeCrypto.deriveSharedSessionKey(
     publicKey,
     currentRoom,
@@ -142,7 +139,6 @@ async function deriveSessionFromPeer(username, publicKey) {
 socket.on("connect", () => {
   setChatStatus("connecting");
   setComposerEnabled(false);
-
   setSystemStatusMessage("Connected. Rejoining secure chat...");
 
   socket.emit("join-room", {
@@ -160,7 +156,11 @@ socket.on("joined-room", async ({ roomId, username }) => {
     localKeyReady = false;
     pendingPeerKeyPayload = null;
     lastDerivedPeerKey = null;
-    if (chatMessages) chatMessages.innerHTML = "";
+
+    if (chatMessages) {
+      chatMessages.innerHTML = "";
+    }
+
     systemStatusRow = null;
 
     setChatStatus("connecting");
@@ -168,10 +168,6 @@ socket.on("joined-room", async ({ roomId, username }) => {
 
     const { publicKey } = await window.e2eeCrypto.generateECDHKeyPair();
     localKeyReady = true;
-
-    console.log("Joined room:", roomId);
-    console.log("Username:", username);
-    console.log("My public key:", publicKey);
 
     const isRejoiningSameRoom = lastJoinedRoomId === roomId;
 
@@ -185,7 +181,6 @@ socket.on("joined-room", async ({ roomId, username }) => {
 
     socket.emit("public-key", {
       roomId,
-      username,
       publicKey,
     });
 
@@ -207,11 +202,6 @@ socket.on("peer-public-key", async ({ username, publicKey }) => {
       pendingPeerKeyPayload = { username, publicKey };
       return;
     }
-    appendMessage({
-      sender: "System",
-      text: `${username} is already in the room. Establishing secure session...`,
-      type: "theirs",
-    });
 
     setSystemStatusMessage("Peer key received. Establishing secure session...");
 
@@ -266,7 +256,6 @@ socket.on("disconnect", () => {
 
   setChatStatus("connecting");
   setComposerEnabled(false);
-
   setSystemStatusMessage("Disconnected. Waiting to reconnect...");
 });
 
@@ -280,8 +269,6 @@ socket.on("error-message", (msg) => {
 
 socket.on("receive-encrypted-message", async ({ username, ciphertext, iv }) => {
   try {
-    console.log("Received encrypted payload:", { username, ciphertext, iv });
-
     const plaintext = await window.e2eeCrypto.decryptMessage(ciphertext, iv);
 
     appendMessage({
@@ -313,7 +300,6 @@ chatForm?.addEventListener("submit", async (event) => {
 
     socket.emit("send-encrypted-message", {
       roomId: currentRoom,
-      username: currentUsername,
       ciphertext,
       iv,
     });
