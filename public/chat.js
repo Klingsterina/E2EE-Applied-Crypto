@@ -1,7 +1,5 @@
-const params = new URLSearchParams(window.location.search);
-
-const currentUsername = params.get("username");
-const currentRoom = params.get("room");
+const currentUsername = sessionStorage.getItem("chatUsername");
+const currentRoom = sessionStorage.getItem("chatRoomId");
 
 const chatRoom = document.getElementById("chat-room");
 const chatUsername = document.getElementById("chat-username");
@@ -16,9 +14,12 @@ let secureSessionReady = false;
 let localKeyReady = false;
 let pendingPeerKeyPayload = null;
 let lastDerivedPeerKey = null;
+let systemStatusRow = null;
+let lastJoinedRoomId = null;
 
 if (!currentUsername || !currentRoom) {
   window.location.href = "/";
+  throw new Error("Missing chat session state");
 }
 
 chatRoom.textContent = currentRoom;
@@ -32,6 +33,7 @@ function setChatStatus(mode) {
   if (mode === "secure") {
     chatStatusBadge.textContent = "Secure";
     chatStatusBadge.classList.add("secure");
+    setSystemStatusMessage("");
     return;
   }
 
@@ -70,6 +72,49 @@ function appendMessage({ sender, text, type = "theirs" }) {
   scrollMessagesToBottom();
 }
 
+function setSystemStatusMessage(text) {
+  if (!chatMessages) return;
+
+  if (!text) {
+    if (systemStatusRow) {
+      systemStatusRow.remove();
+      systemStatusRow = null;
+    }
+    return;
+  }
+
+  if (emptyState) {
+    emptyState.remove();
+  }
+
+  if (!systemStatusRow) {
+    systemStatusRow = document.createElement("div");
+    systemStatusRow.className = "message-row theirs";
+
+    const bubble = document.createElement("div");
+    bubble.className = "message-bubble";
+
+    const meta = document.createElement("span");
+    meta.className = "message-meta";
+    meta.textContent = "System";
+
+    const body = document.createElement("div");
+    body.className = "system-status-body";
+
+    bubble.appendChild(meta);
+    bubble.appendChild(body);
+    systemStatusRow.appendChild(bubble);
+    chatMessages.appendChild(systemStatusRow);
+  }
+
+  const body = systemStatusRow.querySelector(".system-status-body");
+  if (body) {
+    body.textContent = text;
+  }
+
+  scrollMessagesToBottom();
+}
+
 function setComposerEnabled(enabled) {
   if (chatInput) chatInput.disabled = !enabled;
   if (chatSendBtn) chatSendBtn.disabled = !enabled;
@@ -98,6 +143,8 @@ socket.on("connect", () => {
   setChatStatus("connecting");
   setComposerEnabled(false);
 
+  setSystemStatusMessage("Connected. Rejoining secure chat...");
+
   socket.emit("join-room", {
     roomId: currentRoom,
     username: currentUsername,
@@ -113,6 +160,8 @@ socket.on("joined-room", async ({ roomId, username }) => {
     localKeyReady = false;
     pendingPeerKeyPayload = null;
     lastDerivedPeerKey = null;
+    if (chatMessages) chatMessages.innerHTML = "";
+    systemStatusRow = null;
 
     setChatStatus("connecting");
     setComposerEnabled(false);
@@ -123,6 +172,16 @@ socket.on("joined-room", async ({ roomId, username }) => {
     console.log("Joined room:", roomId);
     console.log("Username:", username);
     console.log("My public key:", publicKey);
+
+    const isRejoiningSameRoom = lastJoinedRoomId === roomId;
+
+    setSystemStatusMessage(
+      isRejoiningSameRoom
+        ? "Rejoined room. Establishing secure session..."
+        : "Joined room. Establishing secure session...",
+    );
+
+    lastJoinedRoomId = roomId;
 
     socket.emit("public-key", {
       roomId,
@@ -148,6 +207,13 @@ socket.on("peer-public-key", async ({ username, publicKey }) => {
       pendingPeerKeyPayload = { username, publicKey };
       return;
     }
+    appendMessage({
+      sender: "System",
+      text: `${username} is already in the room. Establishing secure session...`,
+      type: "theirs",
+    });
+
+    setSystemStatusMessage("Peer key received. Establishing secure session...");
 
     if (secureSessionReady && publicKey === lastDerivedPeerKey) {
       console.log("Duplicate peer public key ignored");
@@ -176,12 +242,12 @@ socket.on("user-left", ({ username }) => {
   });
 
   secureSessionReady = false;
-  localKeyReady = false;
   pendingPeerKeyPayload = null;
   lastDerivedPeerKey = null;
 
   setChatStatus("connecting");
   setComposerEnabled(false);
+  setSystemStatusMessage("Peer left. Waiting for a secure peer to join...");
 });
 
 socket.on("room-full", () => {
@@ -192,6 +258,17 @@ socket.on("room-full", () => {
   });
 });
 
+socket.on("disconnect", () => {
+  secureSessionReady = false;
+  localKeyReady = false;
+  pendingPeerKeyPayload = null;
+  lastDerivedPeerKey = null;
+
+  setChatStatus("connecting");
+  setComposerEnabled(false);
+
+  setSystemStatusMessage("Disconnected. Waiting to reconnect...");
+});
 
 socket.on("error-message", (msg) => {
   appendMessage({
