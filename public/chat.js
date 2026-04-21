@@ -207,6 +207,12 @@ socket.on("peer-public-key", async ({ username, publicKey }) => {
       pendingPeerKeyPayload = { username, publicKey };
       return;
     }
+    appendMessage({
+      sender: "System",
+      text: `${username} is already in the room. Establishing secure session...`,
+      type: "theirs",
+    });
+
     setSystemStatusMessage("Peer key received. Establishing secure session...");
 
     if (secureSessionReady && publicKey === lastDerivedPeerKey) {
