@@ -8,6 +8,17 @@ function setStatus(message) {
   statusText.textContent = message;
 }
 
+const savedUsername = sessionStorage.getItem("chatUsername");
+const savedRoomId = sessionStorage.getItem("chatRoomId");
+
+if (savedUsername && usernameInput) {
+  usernameInput.value = savedUsername;
+}
+
+if (savedRoomId && roomInput) {
+  roomInput.value = savedRoomId;
+}
+
 joinBtn?.addEventListener("click", () => {
   const username = usernameInput?.value.trim();
   const roomId = roomInput?.value.trim();
@@ -17,10 +28,8 @@ joinBtn?.addEventListener("click", () => {
     return;
   }
 
-  const params = new URLSearchParams({
-    username,
-    room: roomId,
-  });
+  sessionStorage.setItem("chatUsername", username);
+  sessionStorage.setItem("chatRoomId", roomId);
 
-  window.location.href = `/chat.html?${params.toString()}`;
+  window.location.href = "/chat.html";
 });
