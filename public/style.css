@@ -335,9 +335,19 @@ button:disabled {
 }
 
 .identity-status-text {
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   font-weight: 700;
   color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.identity-row:first-child {
+  margin-bottom: 0.1rem;
 }
 
 .chat-header code {
@@ -374,10 +384,10 @@ button:disabled {
 }
 
 .security-details {
-  margin: 0 1.5rem 0.6rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  margin: 0 1.5rem 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.04);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.015);
   overflow: hidden;
 }
 
@@ -393,8 +403,9 @@ button:disabled {
   list-style: none;
   cursor: pointer;
   padding: 0.7rem 1rem;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   font-weight: 700;
+  color: rgba(195, 192, 192, 0.6);
 }
 
 .security-details-summary::-webkit-details-marker {
@@ -405,7 +416,7 @@ button:disabled {
   content: "+";
   font-size: 1.1rem;
   line-height: 1;
-  opacity: 0.75;
+  opacity: 0.5;
 }
 
 .security-details[open] .security-details-summary::after {
@@ -611,6 +622,10 @@ button:disabled {
   .identity-row {
     grid-template-columns: 1fr;
     gap: 0.35rem;
+  }
+
+  .identity-status-text {
+    width: fit-content;
   }
 }
 
