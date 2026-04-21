@@ -8,6 +8,10 @@
   --bg: #1f1035;
   --panel: #2d1748;
   --panel-soft: #341c53;
+  --panel-strong: #24113d;
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-strong: rgba(255, 255, 255, 0.07);
+  --shadow: 0 30px 80px rgba(0, 0, 0, 0.28);
   --border: rgba(220, 220, 220, 0.8);
   --text: rgb(195, 192, 192);
   --muted: rgba(195, 192, 192, 0.72);
@@ -22,14 +26,14 @@
 body {
   min-height: 100vh;
   font-family: Arial, Helvetica, sans-serif;
-  background-color: var(--bg);
+  background: var(--bg);
   color: var(--text);
   padding: 2rem;
 }
 
 .container {
   width: 100%;
-  max-width: 980px;
+  max-width: 1120px;
   margin: 0 auto;
 }
 
@@ -41,85 +45,210 @@ body {
   min-height: calc(100vh - 4rem);
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
-}
-
-#join-screen h1 {
-  font-size: 4rem;
-  margin-bottom: 2rem;
+  justify-content: center;
+  gap: 1.5rem;
 }
 
 .card {
   width: 100%;
-  max-width: 840px;
-  border: 2px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 32px;
-  padding: 4rem;
-  background-color: rgba(255, 255, 255, 0.03);
+  padding: 1.75rem;
+  background: linear-gradient(180deg, var(--surface-strong), var(--surface));
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
 }
 
 .card h2 {
-  font-size: 3rem;
+  font-size: 2rem;
+  line-height: 1.1;
+  margin-bottom: 0.65rem;
+}
+
+.auth-hero {
+  width: 100%;
+  display: flex;
+  justify-content: center;
   text-align: center;
-  margin-bottom: 2.5rem;
+  padding-right: 0;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #cfd5ff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-bottom: 1rem;
+}
+
+.auth-hero h1 {
+  font-size: clamp(2.6rem, 6.5vw, 4.5rem);
+  line-height: 0.95;
+  margin-bottom: 0;
+}
+
+.hero-copy {
+  max-width: 30rem;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1.6;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 720px;
+}
+
+.card-header {
+  margin-bottom: 1.25rem;
+}
+
+.section-copy {
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.6;
 }
 
 .field {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  margin-bottom: 1.75rem;
 }
 
 .field label {
-  font-size: 1.1rem;
+  font-size: 1rem;
+  font-weight: 700;
   color: var(--text);
 }
 
 .field input,
 .chat-composer input {
   width: 100%;
-  border: 2px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 18px;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text);
-  padding: 1.1rem 1.25rem;
-  font-size: 1.25rem;
+  padding: 1rem 1.1rem;
+  font-size: 1.1rem;
   outline: none;
+  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.field input::placeholder,
-.chat-composer input::placeholder {
-  color: var(--muted);
+.field input:focus,
+.chat-composer input:focus {
+  border-color: rgba(132, 160, 255, 0.9);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 4px rgba(77, 105, 246, 0.16);
 }
 
 button {
   border: none;
-  border-radius: 18px;
+  border-radius: 16px;
   background-color: var(--primary);
   color: white;
   cursor: pointer;
-  transition: 0.2s ease;
-  font-size: 1.2rem;
-  font-weight: 600;
+  transition: transform 0.15s ease, background-color 0.2s ease, opacity 0.2s ease;
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 0.9rem 0.8rem;
 }
 
 button:hover {
   background-color: var(--primary-hover);
 }
 
-#join-btn {
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.auth-screen .status-text {
+  text-align: left;
+  margin-top: 0;
+  min-height: 1.25rem;
+}
+
+.field-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.field-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(77, 105, 246, 0.16);
+  color: #bfd0ff;
+}
+
+.identity-field {
+  gap: 0.9rem;
+  margin-bottom: 1.25rem;
+  padding: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.key-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.helper-text {
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  max-width: 520px;
+  margin-top: -1.25rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.action-row {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: center;
+}
+
+.primary-action {
   width: 100%;
-  padding: 1.1rem 1.25rem;
-  margin-top: 0.5rem;
+}
+
+.secondary-action {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.secondary-action:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .status-text {
-  min-height: 1.5rem;
-  text-align: center;
-  margin-top: 1.5rem;
-  font-size: 1.05rem;
+  min-height: 1.25rem;
+  font-size: 0.98rem;
   color: var(--text);
 }
 
@@ -136,10 +265,11 @@ button:hover {
   max-height: 860px;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  border: 2px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 28px;
   overflow: hidden;
-  background-color: rgba(255, 255, 255, 0.03);
+  background: linear-gradient(180deg, var(--surface-strong), var(--surface));
+  box-shadow: var(--shadow);
 }
 
 .chat-header {
@@ -149,7 +279,7 @@ button:hover {
   gap: 1rem;
   padding: 1.5rem 1.75rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: rgba(255, 255, 255, 0.025);
 }
 
 .chat-title {
@@ -262,22 +392,38 @@ button:hover {
   cursor: not-allowed;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   body {
     padding: 1rem;
   }
 
-  #join-screen h1 {
-    font-size: 2.8rem;
-    text-align: center;
+  #join-screen {
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 1.25rem;
+  }
+
+  .auth-hero {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .auth-hero h1 {
+    font-size: 3.4rem;
+  }
+
+  .auth-card {
+    max-width: none;
+  }
+
+  .form-grid,
+  .action-row,
+  .key-actions {
+    grid-template-columns: 1fr;
   }
 
   .card {
-    padding: 2rem 1.25rem;
-  }
-
-  .card h2 {
-    font-size: 2rem;
+    padding: 1.5rem;
   }
 
   .chat-layout {

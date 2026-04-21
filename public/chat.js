@@ -17,6 +17,24 @@ let lastDerivedPeerKey = null;
 let systemStatusRow = null;
 let lastJoinedRoomId = null;
 
+async function ensureIdentityKeyReady() {
+  const existingPublicKey = window.e2eeCrypto.getPublicKey();
+
+  if (existingPublicKey) {
+    return existingPublicKey;
+  }
+  const persistedIdentity =
+    await window.e2eeCrypto.loadPersistedIdentityKeyPair();
+
+  if (persistedIdentity?.publicKey) {
+    return persistedIdentity.publicKey;
+  }
+
+  throw new Error(
+    "Missing identity key. Please return to the join page and generate or import your identity key.",
+  );
+}
+
 if (!currentUsername || !currentRoom) {
   window.location.href = "/";
   throw new Error("Missing chat session state");
@@ -129,9 +147,6 @@ async function deriveSessionFromPeer(username, publicKey) {
   secureSessionReady = true;
   lastDerivedPeerKey = publicKey;
 
-  console.log("Secure session ready:", secureSessionReady);
-  console.log("Derived session key:", sessionKeyBase64);
-
   setChatStatus("secure");
   setComposerEnabled(true);
 }
@@ -166,15 +181,15 @@ socket.on("joined-room", async ({ roomId, username }) => {
     setChatStatus("connecting");
     setComposerEnabled(false);
 
-    const { publicKey } = await window.e2eeCrypto.generateECDHKeyPair();
+    const publicKey = await ensureIdentityKeyReady();
     localKeyReady = true;
 
     const isRejoiningSameRoom = lastJoinedRoomId === roomId;
 
     setSystemStatusMessage(
       isRejoiningSameRoom
-        ? "Rejoined room. Establishing secure session..."
-        : "Joined room. Establishing secure session...",
+        ? "Rejoined room. Reusing identity key and establishing secure session..."
+        : "Joined room. Reusing identity key and establishing secure session...",
     );
 
     lastJoinedRoomId = roomId;
@@ -192,7 +207,14 @@ socket.on("joined-room", async ({ roomId, username }) => {
       await deriveSessionFromPeer(peerUsername, pendingPublicKey);
     }
   } catch (error) {
-    console.error("ECDH generation failed:", error);
+    console.error("Identity key setup failed:", error);
+
+    setComposerEnabled(false);
+    setChatStatus("connecting");
+    setSystemStatusMessage(
+      error?.message ||
+        "Identity key setup failed. Please return to the join page.",
+    );
   }
 });
 
@@ -203,12 +225,17 @@ socket.on("peer-public-key", async ({ username, publicKey }) => {
       return;
     }
 
-    setSystemStatusMessage("Peer key received. Establishing secure session...");
-
     if (secureSessionReady && publicKey === lastDerivedPeerKey) {
-      console.log("Duplicate peer public key ignored");
       return;
     }
+
+    appendMessage({
+      sender: "System",
+      text: `${username} is already in the room. Establishing secure session...`,
+      type: "theirs",
+    });
+
+    setSystemStatusMessage("Peer key received. Establishing secure session...");
 
     await deriveSessionFromPeer(username, publicKey);
   } catch (error) {

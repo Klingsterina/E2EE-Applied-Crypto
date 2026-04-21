@@ -4,6 +4,13 @@ let sharedSecretBase64 = null;
 let sessionKey = null;
 let exportedSessionKey = null;
 
+const IDENTITY_KEY_BUNDLE_VERSION = 1;
+const IDENTITY_DB_NAME = "e2ee-identity-db";
+const IDENTITY_DB_VERSION = 1;
+const IDENTITY_STORE_NAME = "identity-store";
+const IDENTITY_RECORD_KEY = "default-identity";
+const PBKDF2_ITERATIONS = 250000;
+
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -26,6 +33,207 @@ function base64ToArrayBuffer(base64) {
   return bytes.buffer;
 }
 
+function resetDerivedSessionState() {
+  sharedSecretBase64 = null;
+  sessionKey = null;
+  exportedSessionKey = null;
+}
+
+function normalizeImportedKeyBundle(bundleInput) {
+  const bundle =
+    typeof bundleInput === "string" ? JSON.parse(bundleInput) : bundleInput;
+
+  if (!bundle || typeof bundle !== "object") {
+    throw new Error("Invalid key bundle.");
+  }
+
+  if (bundle.type !== "e2ee-identity-key-bundle") {
+    throw new Error("Unsupported key bundle type.");
+  }
+
+  if (bundle.version !== IDENTITY_KEY_BUNDLE_VERSION) {
+    throw new Error("Unsupported key bundle version.");
+  }
+
+  if (!bundle.privateKeyJwk || !bundle.publicKeyJwk) {
+    throw new Error("Key bundle is missing key material.");
+  }
+
+  return bundle;
+}
+
+function openIdentityDb() {
+  return new Promise((resolve, reject) => {
+    const request = window.indexedDB.open(IDENTITY_DB_NAME, IDENTITY_DB_VERSION);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+
+      if (!db.objectStoreNames.contains(IDENTITY_STORE_NAME)) {
+        db.createObjectStore(IDENTITY_STORE_NAME, { keyPath: "id" });
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function persistIdentityKeyPair(keyPair, publicKeyBase64) {
+  const db = await openIdentityDb();
+
+  await new Promise((resolve, reject) => {
+    const transaction = db.transaction(IDENTITY_STORE_NAME, "readwrite");
+    const store = transaction.objectStore(IDENTITY_STORE_NAME);
+
+    store.put({
+      id: IDENTITY_RECORD_KEY,
+      keyPair,
+      publicKeyBase64,
+      storedAt: new Date().toISOString(),
+    });
+
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  });
+
+  db.close();
+}
+
+async function loadPersistedIdentityKeyPair() {
+  const db = await openIdentityDb();
+
+  const record = await new Promise((resolve, reject) => {
+    const transaction = db.transaction(IDENTITY_STORE_NAME, "readonly");
+    const store = transaction.objectStore(IDENTITY_STORE_NAME);
+    const request = store.get(IDENTITY_RECORD_KEY);
+
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+
+  db.close();
+
+  if (!record?.keyPair?.privateKey || !record?.keyPair?.publicKey) {
+    return null;
+  }
+
+  ecdhKeyPair = record.keyPair;
+  exportedPublicKey = record.publicKeyBase64 || null;
+
+  if (!exportedPublicKey) {
+    const rawPublicKey = await window.crypto.subtle.exportKey(
+      "raw",
+      ecdhKeyPair.publicKey,
+    );
+    exportedPublicKey = arrayBufferToBase64(rawPublicKey);
+  }
+
+  resetDerivedSessionState();
+
+  return {
+    publicKey: exportedPublicKey,
+    keyPair: ecdhKeyPair,
+  };
+}
+
+async function clearPersistedIdentityKeyPair() {
+  const db = await openIdentityDb();
+
+  await new Promise((resolve, reject) => {
+    const transaction = db.transaction(IDENTITY_STORE_NAME, "readwrite");
+    const store = transaction.objectStore(IDENTITY_STORE_NAME);
+    const request = store.delete(IDENTITY_RECORD_KEY);
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+
+  db.close();
+}
+
+async function derivePassphraseWrappingKey(passphrase, saltBuffer) {
+  if (!passphrase) {
+    throw new Error("Passphrase is required.");
+  }
+
+  const keyMaterial = await window.crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(passphrase),
+    { name: "PBKDF2" },
+    false,
+    ["deriveKey"],
+  );
+
+  return window.crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: saltBuffer,
+      iterations: PBKDF2_ITERATIONS,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    {
+      name: "AES-GCM",
+      length: 256,
+    },
+    false,
+    ["encrypt", "decrypt"],
+  );
+}
+
+async function encryptTextWithPassphrase(plaintext, passphrase) {
+  const salt = window.crypto.getRandomValues(new Uint8Array(16));
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const wrappingKey = await derivePassphraseWrappingKey(passphrase, salt);
+
+  const ciphertext = await window.crypto.subtle.encrypt(
+    {
+      name: "AES-GCM",
+      iv,
+    },
+    wrappingKey,
+    new TextEncoder().encode(plaintext),
+  );
+
+  return {
+    kdf: "PBKDF2",
+    iterations: PBKDF2_ITERATIONS,
+    saltBase64: arrayBufferToBase64(salt.buffer),
+    ivBase64: arrayBufferToBase64(iv.buffer),
+    ciphertextBase64: arrayBufferToBase64(ciphertext),
+  };
+}
+
+async function decryptTextWithPassphrase(encryptedPayload, passphrase) {
+  if (
+    !encryptedPayload?.saltBase64 ||
+    !encryptedPayload?.ivBase64 ||
+    !encryptedPayload?.ciphertextBase64
+  ) {
+    throw new Error("Encrypted key bundle payload is invalid.");
+  }
+
+  const saltBuffer = base64ToArrayBuffer(encryptedPayload.saltBase64);
+  const iv = new Uint8Array(base64ToArrayBuffer(encryptedPayload.ivBase64));
+  const ciphertextBuffer = base64ToArrayBuffer(
+    encryptedPayload.ciphertextBase64,
+  );
+  const wrappingKey = await derivePassphraseWrappingKey(passphrase, saltBuffer);
+
+  const plaintextBuffer = await window.crypto.subtle.decrypt(
+    {
+      name: "AES-GCM",
+      iv,
+    },
+    wrappingKey,
+    ciphertextBuffer,
+  );
+
+  return new TextDecoder().decode(plaintextBuffer);
+}
+
 async function generateECDHKeyPair() {
   ecdhKeyPair = await window.crypto.subtle.generateKey(
     {
@@ -42,6 +250,8 @@ async function generateECDHKeyPair() {
   );
 
   exportedPublicKey = arrayBufferToBase64(rawPublicKey);
+  resetDerivedSessionState();
+  await persistIdentityKeyPair(ecdhKeyPair, exportedPublicKey);
 
   console.log("ECDH key pair generated");
   console.log("Public key:", exportedPublicKey);
@@ -50,6 +260,133 @@ async function generateECDHKeyPair() {
     publicKey: exportedPublicKey,
     keyPair: ecdhKeyPair,
   };
+}
+
+async function exportIdentityKeyBundle() {
+  if (!ecdhKeyPair?.privateKey || !ecdhKeyPair?.publicKey) {
+    throw new Error("ECDH key pair not ready.");
+  }
+
+  const privateKeyJwk = await window.crypto.subtle.exportKey(
+    "jwk",
+    ecdhKeyPair.privateKey,
+  );
+
+  const publicKeyJwk = await window.crypto.subtle.exportKey(
+    "jwk",
+    ecdhKeyPair.publicKey,
+  );
+
+  return {
+    type: "e2ee-identity-key-bundle",
+    version: IDENTITY_KEY_BUNDLE_VERSION,
+    algorithm: "ECDH",
+    namedCurve: "P-256",
+    createdAt: new Date().toISOString(),
+    publicKeyBase64: exportedPublicKey,
+    publicKeyJwk,
+    privateKeyJwk,
+  };
+}
+
+async function importIdentityKeyBundle(bundleInput) {
+  const bundle = normalizeImportedKeyBundle(bundleInput);
+
+  const importedPrivateKey = await window.crypto.subtle.importKey(
+    "jwk",
+    bundle.privateKeyJwk,
+    {
+      name: "ECDH",
+      namedCurve: "P-256",
+    },
+    true,
+    ["deriveBits"],
+  );
+
+  const importedPublicKey = await window.crypto.subtle.importKey(
+    "jwk",
+    bundle.publicKeyJwk,
+    {
+      name: "ECDH",
+      namedCurve: "P-256",
+    },
+    true,
+    [],
+  );
+
+  ecdhKeyPair = {
+    privateKey: importedPrivateKey,
+    publicKey: importedPublicKey,
+  };
+
+  const rawPublicKey = await window.crypto.subtle.exportKey(
+    "raw",
+    importedPublicKey,
+  );
+
+  exportedPublicKey = arrayBufferToBase64(rawPublicKey);
+  resetDerivedSessionState();
+  await persistIdentityKeyPair(ecdhKeyPair, exportedPublicKey);
+
+  console.log("ECDH identity key bundle imported");
+  console.log("Public key:", exportedPublicKey);
+
+  return {
+    publicKey: exportedPublicKey,
+    keyPair: ecdhKeyPair,
+  };
+}
+
+async function exportIdentityKeyBundleJson() {
+  const bundle = await exportIdentityKeyBundle();
+  return JSON.stringify(bundle, null, 2);
+}
+
+async function exportEncryptedIdentityKeyBundle(passphrase) {
+  const bundle = await exportIdentityKeyBundle();
+  const encryptedPrivateBundle = await encryptTextWithPassphrase(
+    JSON.stringify(bundle),
+    passphrase,
+  );
+
+  return {
+    type: "e2ee-encrypted-identity-key-bundle",
+    version: IDENTITY_KEY_BUNDLE_VERSION,
+    algorithm: "ECDH",
+    namedCurve: "P-256",
+    createdAt: new Date().toISOString(),
+    publicKeyBase64: bundle.publicKeyBase64,
+    encryptedPrivateBundle,
+  };
+}
+
+async function exportEncryptedIdentityKeyBundleJson(passphrase) {
+  const bundle = await exportEncryptedIdentityKeyBundle(passphrase);
+  return JSON.stringify(bundle, null, 2);
+}
+
+async function importEncryptedIdentityKeyBundle(bundleInput, passphrase) {
+  const encryptedBundle =
+    typeof bundleInput === "string" ? JSON.parse(bundleInput) : bundleInput;
+
+  if (!encryptedBundle || typeof encryptedBundle !== "object") {
+    throw new Error("Invalid encrypted key bundle.");
+  }
+
+  if (encryptedBundle.type !== "e2ee-encrypted-identity-key-bundle") {
+    throw new Error("Unsupported encrypted key bundle type.");
+  }
+
+  if (encryptedBundle.version !== IDENTITY_KEY_BUNDLE_VERSION) {
+    throw new Error("Unsupported encrypted key bundle version.");
+  }
+
+  const decryptedBundleJson = await decryptTextWithPassphrase(
+    encryptedBundle.encryptedPrivateBundle,
+    passphrase,
+  );
+
+  return importIdentityKeyBundle(decryptedBundleJson);
 }
 
 async function importPeerPublicKey(publicKeyBase64) {
@@ -211,6 +548,14 @@ function getExportedSessionKey() {
 
 window.e2eeCrypto = {
   generateECDHKeyPair,
+  loadPersistedIdentityKeyPair,
+  clearPersistedIdentityKeyPair,
+  exportEncryptedIdentityKeyBundle,
+  exportEncryptedIdentityKeyBundleJson,
+  importEncryptedIdentityKeyBundle,
+  exportIdentityKeyBundle,
+  exportIdentityKeyBundleJson,
+  importIdentityKeyBundle,
   importPeerPublicKey,
   deriveSharedSecret,
   deriveSessionKeyFromSharedSecret,
