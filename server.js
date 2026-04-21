@@ -6,7 +6,10 @@ const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  pingInterval: 25000,
+  pingTimeout: 120000,
+});
 
 const PORT = process.env.PORT || 3000;
 
