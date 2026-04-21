@@ -21,6 +21,8 @@ app.get("/health", (_req, res) => {
 
 const ROOM_ID_REGEX = /^[A-Za-z0-9_-]{22}$/;
 const issuedRooms = new Map();
+const EMPTY_ROOM_TTL_MS = 30_000;
+const pendingRoomDeletions = new Map();
 
 const JOIN_WINDOW_MS = 60_000;
 const MAX_JOIN_ATTEMPTS = 10;
@@ -53,6 +55,32 @@ function isJoinRateLimited(socket) {
   return recentAttempts.length > MAX_JOIN_ATTEMPTS;
 }
 
+function cancelPendingRoomDeletion(roomId) {
+  const timeoutId = pendingRoomDeletions.get(roomId);
+
+  if (timeoutId) {
+    clearTimeout(timeoutId);
+    pendingRoomDeletions.delete(roomId);
+  }
+}
+
+function scheduleRoomDeletionIfEmpty(roomId) {
+  cancelPendingRoomDeletion(roomId);
+
+  const timeoutId = setTimeout(() => {
+    const room = io.sockets.adapter.rooms.get(roomId);
+
+    if (!room || room.size === 0) {
+      issuedRooms.delete(roomId);
+      console.log(`Deleted empty room ${roomId}`);
+    }
+
+    pendingRoomDeletions.delete(roomId);
+  }, EMPTY_ROOM_TTL_MS);
+
+  pendingRoomDeletions.set(roomId, timeoutId);
+}
+
 io.on("connection", (socket) => {
   console.log(`Socket connected: ${socket.id}`);
 
@@ -68,6 +96,39 @@ io.on("connection", (socket) => {
     });
 
     socket.emit("room-created", { roomId });
+  });
+
+  socket.on("validate-room", ({ roomId } = {}, callback) => {
+    if (typeof callback !== "function") {
+      return;
+    }
+
+    if (typeof roomId !== "string" || !roomId.trim()) {
+      callback({ ok: false, message: "Room code is required." });
+      return;
+    }
+
+    const normalizedRoomId = roomId.trim();
+
+    if (!ROOM_ID_REGEX.test(normalizedRoomId)) {
+      callback({ ok: false, message: "Invalid room code format." });
+      return;
+    }
+
+    if (!issuedRooms.has(normalizedRoomId)) {
+      callback({ ok: false, message: "Invalid room code." });
+      return;
+    }
+
+    const room = io.sockets.adapter.rooms.get(normalizedRoomId);
+    const roomSize = room ? room.size : 0;
+
+    if (roomSize >= 2) {
+      callback({ ok: false, message: "Room is full." });
+      return;
+    }
+
+    callback({ ok: true });
   });
 
   socket.on("join-room", ({ roomId, username } = {}) => {
@@ -111,6 +172,8 @@ io.on("connection", (socket) => {
       socket.emit("room-full");
       return;
     }
+
+    cancelPendingRoomDeletion(normalizedRoomId);
 
     socket.join(normalizedRoomId);
     socket.data.roomId = normalizedRoomId;
@@ -208,7 +271,7 @@ io.on("connection", (socket) => {
     console.log("[relay] encrypted message forwarded");
   });
 
-  socket.on("disconnect", () => {
+  socket.on("disconnecting", () => {
     const { roomId, username } = socket.data || {};
 
     if (roomId) {
@@ -220,6 +283,14 @@ io.on("connection", (socket) => {
 
     if (username && roomId) {
       console.log("[presence] user left room");
+    }
+  });
+
+  socket.on("disconnect", () => {
+    const { roomId } = socket.data || {};
+
+    if (roomId) {
+      scheduleRoomDeletionIfEmpty(roomId);
     }
 
     console.log(`Socket disconnected: ${socket.id}`);

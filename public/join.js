@@ -260,10 +260,19 @@ joinBtn?.addEventListener("click", () => {
     return;
   }
 
-  sessionStorage.setItem("chatUsername", username);
-  sessionStorage.setItem("chatRoomId", roomId);
+  setStatus("Checking room code...");
 
-  window.location.href = "/chat.html";
+  socket.emit("validate-room", { roomId }, ({ ok, message }) => {
+    if (!ok) {
+      setStatus(message || "Invalid room code.");
+      return;
+    }
+
+    sessionStorage.setItem("chatUsername", username);
+    sessionStorage.setItem("chatRoomId", roomId);
+
+    window.location.href = "/chat.html";
+  });
 });
 
 socket.on("error-message", (msg) => {
