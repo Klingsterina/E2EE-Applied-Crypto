@@ -1,3 +1,9 @@
+const generateKeyBtn = document.getElementById("generate-key-btn");
+const downloadKeyBtn = document.getElementById("download-key-btn");
+const importKeyBtn = document.getElementById("import-key-btn");
+const importKeyFileInput = document.getElementById("import-key-file");
+const keyStatusText = document.getElementById("key-status");
+
 const usernameInput = document.getElementById("username");
 const roomInput = document.getElementById("room");
 const createRoomBtn = document.getElementById("create-room-btn");
@@ -11,6 +17,11 @@ function setStatus(message) {
   statusText.textContent = message;
 }
 
+function setKeyStatus(message) {
+  if (!keyStatusText) return;
+  keyStatusText.textContent = message;
+}
+
 const savedUsername = sessionStorage.getItem("chatUsername");
 const savedRoomId = sessionStorage.getItem("chatRoomId");
 
@@ -22,30 +33,139 @@ if (savedRoomId && roomInput) {
   roomInput.value = savedRoomId;
 }
 
-createRoomBtn?.addEventListener("click", () => {
-  const username = usernameInput?.value.trim();
+let hasIdentityKey = false;
 
-  if (!username) {
-    setStatus("Username is required.");
-    return;
+async function initializeIdentityKeyState() {
+  sessionStorage.removeItem("identityKeyBundle");
+
+  try {
+    const persistedIdentity =
+      await window.e2eeCrypto.loadPersistedIdentityKeyPair();
+
+    if (!persistedIdentity?.publicKey) {
+      sessionStorage.removeItem("identityPublicKey");
+      sessionStorage.removeItem("identityKeyLoaded");
+      return;
+    }
+
+    hasIdentityKey = true;
+    if (downloadKeyBtn) downloadKeyBtn.disabled = false;
+
+    sessionStorage.setItem("identityPublicKey", persistedIdentity.publicKey);
+    sessionStorage.setItem("identityKeyLoaded", "true");
+    setKeyStatus("Identity key loaded from this browser.");
+  } catch (err) {
+    console.error(err);
+    sessionStorage.removeItem("identityPublicKey");
+    sessionStorage.removeItem("identityKeyLoaded");
+    setKeyStatus("Failed to load saved identity key.");
   }
+}
 
-  setStatus("Generating secure room code...");
-  socket.emit("create-room");
+initializeIdentityKeyState();
+
+generateKeyBtn?.addEventListener("click", async () => {
+  try {
+    setKeyStatus("Generating identity key...");
+
+    const { publicKey } = await window.e2eeCrypto.generateECDHKeyPair();
+
+    hasIdentityKey = true;
+    downloadKeyBtn.disabled = false;
+
+    sessionStorage.setItem("identityPublicKey", publicKey);
+    sessionStorage.setItem("identityKeyLoaded", "true");
+    setKeyStatus(
+      "Identity key generated and stored in this browser. You can now download an encrypted backup.",
+    );
+  } catch (err) {
+    console.error(err);
+    setKeyStatus("Failed to generate key.");
+  }
 });
 
-socket.on("room-created", ({ roomId }) => {
-  const username = usernameInput?.value.trim();
+downloadKeyBtn?.addEventListener("click", async () => {
+  try {
+    const passphrase = window.prompt(
+      "Enter a passphrase to encrypt your key file:",
+    );
 
-  if (!username) {
-    setStatus("Username is required.");
-    return;
+    if (!passphrase) {
+      setKeyStatus("Encrypted key download cancelled.");
+      return;
+    }
+
+    const confirmPassphrase = window.prompt(
+      "Re-enter the passphrase to confirm:",
+    );
+
+    if (passphrase !== confirmPassphrase) {
+      setKeyStatus("Passphrases did not match.");
+      return;
+    }
+
+    const json =
+      await window.e2eeCrypto.exportEncryptedIdentityKeyBundleJson(passphrase);
+
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "identity-key.encrypted.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    URL.revokeObjectURL(url);
+
+    setKeyStatus(
+      "Encrypted key downloaded. Keep both the file and passphrase safe.",
+    );
+  } catch (err) {
+    console.error(err);
+    setKeyStatus("Failed to download encrypted key.");
+  }
+});
+
+importKeyBtn?.addEventListener("click", () => {
+  importKeyFileInput?.click();
+});
+
+importKeyFileInput?.addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const passphrase = window.prompt(
+      "Enter the passphrase used to encrypt this key file:",
+    );
+
+    if (!passphrase) {
+      setKeyStatus("Encrypted key import cancelled.");
+      event.target.value = "";
+      return;
+    }
+
+    const { publicKey } =
+      await window.e2eeCrypto.importEncryptedIdentityKeyBundle(
+        text,
+        passphrase,
+      );
+
+    hasIdentityKey = true;
+    downloadKeyBtn.disabled = false;
+
+    sessionStorage.setItem("identityPublicKey", publicKey);
+    sessionStorage.setItem("identityKeyLoaded", "true");
+    setKeyStatus("Encrypted identity key imported successfully.");
+  } catch (err) {
+    console.error(err);
+    setKeyStatus("Invalid key file or incorrect passphrase.");
   }
 
-  sessionStorage.setItem("chatUsername", username);
-  sessionStorage.setItem("chatRoomId", roomId);
-
-  window.location.href = "/chat.html";
+  event.target.value = "";
 });
 
 joinBtn?.addEventListener("click", () => {
@@ -59,6 +179,11 @@ joinBtn?.addEventListener("click", () => {
 
   if (!ROOM_ID_REGEX.test(roomId)) {
     setStatus("Invalid room code format.");
+    return;
+  }
+
+  if (!hasIdentityKey) {
+    setStatus("You must generate or import an identity key before joining.");
     return;
   }
 

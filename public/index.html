@@ -8,24 +8,49 @@
   </head>
   <body>
     <main class="container">
-      <section id="join-screen" class="screen">
-        <h1>E2EE Chat</h1>
+      <section id="join-screen" class="screen auth-screen">
+        <div class="auth-hero">
+          <h1>Encrypted Chat</h1>
+        </div>
 
-        <div class="card">
-          <h2>Create or Join a Room</h2>
-
-          <div class="field">
-            <label for="username">Username</label>
-            <input id="username" type="text" placeholder="Enter your username" />
+        <div class="card auth-card">
+          <div class="card-header">
+            <h2>Join or Create a Room</h2>
+            <p class="section-copy">Generate or import your identity key to continue.</p>
           </div>
 
-          <div class="field">
-            <label for="room">Room Code</label>
-            <input id="room" type="text" placeholder="Paste room code" />
+          <div class="field identity-field">
+            <div class="field-heading">
+              <label>Identity Key*</label>
+            </div>
+
+            <div class="key-actions" role="group" aria-label="Identity key actions">
+              <button id="generate-key-btn" type="button">Generate Key</button>
+              <button id="download-key-btn" type="button" disabled>Download Backup Key</button>
+              <button id="import-key-btn" type="button">Import Backup Key</button>
+            </div>
+
+            <input id="import-key-file" type="file" accept="application/json" hidden />
+            <p id="key-status" class="status-text"></p>
+            <p class="helper-text">Backups are encrypted. Never share your file or passphrase.</p>
           </div>
 
-          <button id="create-room-btn" type="button">Create secure room</button>
-          <button id="join-btn" type="button">Join room</button>
+          <div class="form-grid">
+            <div class="field">
+              <label for="username">Username*</label>
+              <input id="username" type="text" placeholder="Enter your username" autocomplete="nickname" />
+            </div>
+
+            <div class="field">
+              <label for="room">Room Code*</label>
+              <input id="room" type="text" placeholder="Paste or generate a room code" autocomplete="off" />
+            </div>
+          </div>
+
+          <div class="action-row">
+            <button id="create-room-btn" type="button" class="secondary-action">Create room</button>
+            <button id="join-btn" type="button" class="primary-action">Join room</button>
+          </div>
 
           <p id="status" class="status-text"></p>
         </div>
