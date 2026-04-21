@@ -9,10 +9,12 @@ const emptyState = document.getElementById("empty-state");
 const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 const chatSendBtn = document.getElementById("chat-send-btn");
+const leaveRoomBtn = document.getElementById("leave-room-btn");
 
 const localFingerprintText = document.getElementById("local-fingerprint");
 const peerFingerprintText = document.getElementById("peer-fingerprint");
 const peerUsernameText = document.getElementById("peer-identity-username");
+const peerFingerprintStatusText = document.getElementById("peer-fingerprint-status");
 
 let secureSessionReady = false;
 let localKeyReady = false;
@@ -20,6 +22,15 @@ let pendingPeerKeyPayload = null;
 let lastDerivedPeerKey = null;
 let systemStatusRow = null;
 let lastJoinedRoomId = null;
+
+function getPeerFingerprintStorageKey() {
+  return `knownPeerFingerprint:${currentRoom}`;
+}
+
+function setPeerFingerprintStatus(text) {
+  if (!peerFingerprintStatusText) return;
+  peerFingerprintStatusText.textContent = text;
+}
 
 async function renderLocalIdentity(publicKey) {
   if (!localFingerprintText) return;
@@ -40,6 +51,7 @@ async function renderPeerIdentity(username, publicKey) {
 
   if (!publicKey) {
     peerFingerprintText.textContent = "Waiting for peer key...";
+    setPeerFingerprintStatus("");
 
     if (peerUsernameText) {
       peerUsernameText.textContent = "";
@@ -51,11 +63,31 @@ async function renderPeerIdentity(username, publicKey) {
   const fingerprint =
     await window.e2eeCrypto.getPublicKeyFingerprint(publicKey);
 
+  const storageKey = getPeerFingerprintStorageKey();
+  const knownFingerprint = localStorage.getItem(storageKey);
+
+  let fingerprintStatus = "New peer key";
+
+  if (!knownFingerprint) {
+    localStorage.setItem(storageKey, fingerprint);
+  } else if (knownFingerprint === fingerprint) {
+    fingerprintStatus = "Known peer key";
+  } else {
+    fingerprintStatus = "Warning: peer key changed";
+
+    appendMessage({
+      sender: "System",
+      text: "Warning: peer key changed for this room. Verify the fingerprint out of band.",
+      type: "theirs",
+    });
+  }
+
   if (peerUsernameText) {
     peerUsernameText.textContent = username || "Peer";
   }
 
   peerFingerprintText.textContent = fingerprint;
+  setPeerFingerprintStatus(fingerprintStatus);
 }
 
 async function ensureIdentityKeyReady() {
@@ -149,7 +181,7 @@ function setSystemStatusMessage(text) {
 
   if (!systemStatusRow) {
     systemStatusRow = document.createElement("div");
-    systemStatusRow.className = "message-row theirs";
+    systemStatusRow.className = "message-row system";
 
     const bubble = document.createElement("div");
     bubble.className = "message-bubble";
@@ -220,6 +252,7 @@ socket.on("joined-room", async ({ roomId, username }) => {
     setChatStatus("connecting");
     setComposerEnabled(false);
     await renderPeerIdentity("", null);
+    setPeerFingerprintStatus("");
 
     const publicKey = await ensureIdentityKeyReady();
     await renderLocalIdentity(publicKey);
@@ -284,17 +317,18 @@ socket.on("user-joined", ({ username }) => {
   appendMessage({
     sender: "System",
     text: `${username} joined the room.`,
-    type: "theirs",
+    type: "system",
   });
 });
 
 socket.on("user-left", async ({ username }) => {
   await renderPeerIdentity("", null);
+  setPeerFingerprintStatus("");
 
   appendMessage({
     sender: "System",
     text: `${username} left the room.`,
-    type: "theirs",
+    type: "system",
   });
 
   secureSessionReady = false;
@@ -310,7 +344,7 @@ socket.on("room-full", () => {
   appendMessage({
     sender: "System",
     text: "Room is full.",
-    type: "theirs",
+    type: "system",
   });
 });
 
@@ -321,6 +355,7 @@ socket.on("disconnect", async () => {
   lastDerivedPeerKey = null;
 
   await renderPeerIdentity("", null);
+  setPeerFingerprintStatus("");
 
   setChatStatus("connecting");
   setComposerEnabled(false);
@@ -331,7 +366,7 @@ socket.on("error-message", (msg) => {
   appendMessage({
     sender: "System",
     text: msg,
-    type: "theirs",
+    type: "system",
   });
 });
 
@@ -350,9 +385,25 @@ socket.on("receive-encrypted-message", async ({ username, ciphertext, iv }) => {
     appendMessage({
       sender: "System",
       text: "Failed to decrypt incoming message.",
-      type: "theirs",
+      type: "system",
     });
   }
+});
+
+leaveRoomBtn?.addEventListener("click", () => {
+  sessionStorage.removeItem("chatRoomId");
+
+  secureSessionReady = false;
+  localKeyReady = false;
+  pendingPeerKeyPayload = null;
+  lastDerivedPeerKey = null;
+
+  if (chatInput) {
+    chatInput.value = "";
+  }
+
+  socket.disconnect();
+  window.location.href = "/";
 });
 
 chatForm?.addEventListener("submit", async (event) => {

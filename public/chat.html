@@ -11,7 +11,7 @@
     <section id="chat-screen" class="screen">
       <div class="chat-layout">
         <header class="chat-header">
-          <div>
+          <div class="chat-header-main">
             <h1 class="chat-title">Secure Chat</h1>
             <p class="chat-subtitle">
               Room: <span id="chat-room">-</span>
@@ -20,18 +20,36 @@
 
           <div class="chat-header-right">
             <p class="chat-user">You: <span id="chat-username">-</span></p>
-            <span id="chat-status-badge" class="chat-status connecting">Connecting</span>
-          </div>
-
-          <div class="identity-panel">
-            <p><strong>Your fingerprint:</strong> <code id="local-fingerprint">Loading...</code></p>
-            <p>
-              <strong>Peer fingerprint:</strong>
-              <span id="peer-identity-username"></span>
-              <code id="peer-fingerprint">Waiting for peer key...</code>
-            </p>
+            <div class="chat-header-actions">
+              <span id="chat-status-badge" class="chat-status connecting">Connecting</span>
+              <button id="leave-room-btn" type="button" class="secondary-action">Leave room</button>
+            </div>
           </div>
         </header>
+
+        <details class="security-details">
+          <summary class="security-details-summary">
+            <span>Verify keys</span>
+          </summary>
+
+          <div class="identity-panel">
+            <div class="identity-row">
+              <span class="identity-label">Key status</span>
+              <span id="peer-fingerprint-status" class="identity-status-text"></span>
+            </div>
+            <div class="identity-row">
+              <span class="identity-label">Your fingerprint</span>
+              <code id="local-fingerprint">Loading...</code>
+            </div>
+            <div class="identity-row">
+              <span class="identity-label">Peer fingerprint</span>
+              <div class="identity-value-stack">
+                <span id="peer-identity-username" class="identity-peer-name"></span>
+                <code id="peer-fingerprint">Waiting for peer key...</code>
+              </div>
+            </div>
+          </div>
+        </details>
 
         <section id="chat-messages" class="chat-messages">
           <div class="empty-state" id="empty-state">
