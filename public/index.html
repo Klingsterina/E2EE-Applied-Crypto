@@ -10,14 +10,10 @@
     <main class="container">
       <section id="join-screen" class="screen auth-screen">
         <div class="auth-hero">
-          <h1>Encrypted Chat</h1>
+          <h1>Join or create a room</h1>
         </div>
 
-        <div class="card auth-card">
-          <div class="card-header">
-            <h2>Join or Create a Room</h2>
-            <p class="section-copy">Generate or import your identity key to continue.</p>
-          </div>
+        <div class="auth-card">
 
           <div class="field identity-field">
             <div class="field-heading">
@@ -33,17 +29,18 @@
             <input id="import-key-file" type="file" accept="application/json" hidden />
             <p id="key-status" class="status-text"></p>
             <p class="helper-text">Backups are encrypted. Never share your file or passphrase.</p>
-          </div>
-          <div class="identity-info">
-            <p class="identity-fingerprint-line">
-              <strong>Your key fingerprint:</strong>
-              <code id="identity-fingerprint">No identity key loaded</code>
-            </p>
 
-            <details class="public-key-details">
-              <summary>Show public key</summary>
-              <pre class="public-key-box"><code id="identity-public-key"></code></pre>
-            </details>
+            <div class="identity-info compact-identity-info">
+              <p class="identity-fingerprint-line">
+                <strong>Your key fingerprint:</strong>
+                <code id="identity-fingerprint">No identity key loaded</code>
+              </p>
+
+              <details class="public-key-details">
+                <summary>Show public key</summary>
+                <pre class="public-key-box"><code id="identity-public-key"></code></pre>
+              </details>
+            </div>
           </div>
 
           <div class="form-grid">
