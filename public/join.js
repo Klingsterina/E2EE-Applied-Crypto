@@ -12,6 +12,30 @@ const statusText = document.getElementById("status");
 const identityFingerprintText = document.getElementById("identity-fingerprint");
 const identityPublicKeyText = document.getElementById("identity-public-key");
 
+const modeTabs = document.querySelectorAll(".mode-tab");
+const modePanels = document.querySelectorAll(".mode-panel");
+
+function setRoomMode(mode) {
+  modeTabs.forEach((tab) => {
+    const isActive = tab.dataset.mode === mode;
+    tab.classList.toggle("is-active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+  });
+
+  modePanels.forEach((panel) => {
+    const isActive = panel.dataset.panel === mode;
+    panel.classList.toggle("hidden-mode", !isActive);
+    panel.setAttribute("aria-hidden", String(!isActive));
+  });
+}
+
+modeTabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    setRoomMode(tab.dataset.mode);
+    setStatus("");
+  });
+});
+
 const ROOM_ID_REGEX = /^[A-Za-z0-9_-]{22}$/;
 
 function setStatus(message) {
