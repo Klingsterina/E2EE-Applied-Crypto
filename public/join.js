@@ -112,7 +112,7 @@ generateKeyBtn?.addEventListener("click", async () => {
     await renderIdentityInfo(publicKey);
 
     setKeyStatus(
-      "Identity key generated and stored in this browser. You can now download an encrypted backup.",
+      "Identity key generated. Click 'Download backup key' to save an encrypted copy!",
     );
   } catch (err) {
     console.error(err);

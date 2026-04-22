@@ -17,18 +17,17 @@
 
           <div class="field identity-field">
             <div class="field-heading">
-              <label>Identity Key*</label>
+              <label>Identity key*</label>
             </div>
 
             <div class="key-actions" role="group" aria-label="Identity key actions">
-              <button id="generate-key-btn" type="button">Generate Key</button>
-              <button id="download-key-btn" type="button" disabled>Download Backup Key</button>
-              <button id="import-key-btn" type="button">Import Backup Key</button>
+              <button id="generate-key-btn" type="button">Generate key</button>
+              <button id="download-key-btn" type="button" disabled>Download backup key</button>
+              <button id="import-key-btn" type="button">Import backup key</button>
             </div>
 
             <input id="import-key-file" type="file" accept="application/json" hidden />
             <p id="key-status" class="status-text"></p>
-            <p class="helper-text">Backups are encrypted. Never share your file or passphrase.</p>
 
             <div class="identity-info compact-identity-info">
               <p class="identity-fingerprint-line">
@@ -43,21 +42,35 @@
             </div>
           </div>
 
-          <div class="form-grid">
+          <div class="mode-switch" role="tablist" aria-label="Room mode">
+            <button type="button" class="mode-tab is-active" data-mode="join" aria-selected="true">Join room</button>
+            <button type="button" class="mode-tab" data-mode="create" aria-selected="false">Create room</button>
+          </div>
+
+          <div class="field shared-field">
+            <label for="username">Username*</label>
+            <input id="username" type="text" placeholder="Enter your username" autocomplete="nickname" />
+          </div>
+
+          <div class="mode-panel" data-panel="join">
             <div class="field">
-              <label for="username">Username*</label>
-              <input id="username" type="text" placeholder="Enter your username" autocomplete="nickname" />
+              <label for="room">Room code*</label>
+              <input id="room" type="text" placeholder="Paste a room code to join" autocomplete="off" />
             </div>
 
-            <div class="field">
-              <label for="room">Room Code*</label>
-              <input id="room" type="text" placeholder="Paste or generate a room code" autocomplete="off" />
+            <p class="mode-help-text">Paste an existing room code, then click Join room.</p>
+
+            <div class="action-row single-action-row">
+              <button id="join-btn" type="button" class="primary-action">Join room</button>
             </div>
           </div>
 
-          <div class="action-row">
-            <button id="create-room-btn" type="button" class="secondary-action">Create room</button>
-            <button id="join-btn" type="button" class="primary-action">Join room</button>
+          <div class="mode-panel hidden-mode" data-panel="create" aria-hidden="true">
+            <p class="mode-help-text">Click Create room to generate a new room code automatically.</p>
+
+            <div class="action-row single-action-row">
+              <button id="create-room-btn" type="button" class="secondary-action">Create room</button>
+            </div>
           </div>
 
           <p id="status" class="status-text"></p>
@@ -65,6 +78,28 @@
       </section>
     </main>
 
+    <script>
+      const modeTabs = document.querySelectorAll('.mode-tab');
+      const modePanels = document.querySelectorAll('.mode-panel');
+
+      function setRoomMode(mode) {
+        modeTabs.forEach((tab) => {
+          const isActive = tab.dataset.mode === mode;
+          tab.classList.toggle('is-active', isActive);
+          tab.setAttribute('aria-selected', String(isActive));
+        });
+
+        modePanels.forEach((panel) => {
+          const isActive = panel.dataset.panel === mode;
+          panel.classList.toggle('hidden-mode', !isActive);
+          panel.setAttribute('aria-hidden', String(!isActive));
+        });
+      }
+
+      modeTabs.forEach((tab) => {
+        tab.addEventListener('click', () => setRoomMode(tab.dataset.mode));
+      });
+    </script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="socket.js"></script>
     <script src="crypto.js"></script>
