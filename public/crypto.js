@@ -537,18 +537,6 @@ function getPublicKey() {
   return exportedPublicKey;
 }
 
-function getSharedSecret() {
-  return sharedSecretBase64;
-}
-
-function getSessionKey() {
-  return sessionKey;
-}
-
-function getExportedSessionKey() {
-  return exportedSessionKey;
-}
-
 window.e2eeCrypto = {
   generateECDHKeyPair,
   loadPersistedIdentityKeyPair,
@@ -567,8 +555,5 @@ window.e2eeCrypto = {
   decryptMessage,
   getECDHKeyPair,
   getPublicKey,
-  getSharedSecret,
-  getSessionKey,
-  getExportedSessionKey,
   getPublicKeyFingerprint,
 };
