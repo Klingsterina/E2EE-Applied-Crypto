@@ -228,11 +228,12 @@ importKeyFileInput?.addEventListener("change", async (event) => {
       );
 
     hasIdentityKey = true;
-    downloadKeyBtn.disabled = false;
+    if (downloadKeyBtn) downloadKeyBtn.disabled = false;
 
     sessionStorage.setItem("identityPublicKey", publicKey);
     sessionStorage.setItem("identityKeyLoaded", "true");
     setKeyStatus("Encrypted identity key imported successfully.");
+    await renderIdentityInfo(publicKey);
   } catch (err) {
     console.error(err);
     setKeyStatus("Invalid key file or incorrect passphrase.");
