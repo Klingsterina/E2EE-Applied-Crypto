@@ -110,7 +110,10 @@ async function ensureIdentityKeyReady() {
 }
 
 if (!currentUsername || !currentRoom) {
-  window.location.href = "/";
+  sessionStorage.removeItem("chatUsername");
+  sessionStorage.removeItem("chatRoomId");
+  console.warn("Missing chat session state. Redirecting to join page.");
+  window.location.replace("/");
   throw new Error("Missing chat session state");
 }
 
