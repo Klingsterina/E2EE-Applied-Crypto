@@ -1,16 +1,22 @@
-let ecdhKeyPair = null;
-let exportedPublicKey = null;
-let sharedSecretBase64 = null;
-let sessionKey = null;
-let exportedSessionKey = null;
-
 const IDENTITY_KEY_BUNDLE_VERSION = 1;
 const IDENTITY_DB_NAME = "e2ee-identity-db";
 const IDENTITY_DB_VERSION = 1;
 const IDENTITY_STORE_NAME = "identity-store";
 const IDENTITY_RECORD_KEY = "default-identity";
 const PBKDF2_ITERATIONS = 250000;
+const AES_GCM_NONCE_BYTES = 12;
+const PBKDF2_SALT_BYTES = 16;
+const PUBLIC_KEY_FINGERPRINT_BYTES = 16;
+const HKDF_INFO = "e2ee-chat-session-key";
+const MAX_PUBLIC_KEY_BASE64_LENGTH = 1_000;
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
 
+let ecdhKeyPair = null;
+let exportedPublicKey = null;
+let sessionKey = null;
+
+// From ArrayBuffer to Base64 and vice versa
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -33,12 +39,12 @@ function base64ToArrayBuffer(base64) {
   return bytes.buffer;
 }
 
+// Tiny helper to reset derived session state :P
 function resetDerivedSessionState() {
-  sharedSecretBase64 = null;
   sessionKey = null;
-  exportedSessionKey = null;
 }
 
+// Validating imported identity keys
 function normalizeImportedKeyBundle(bundleInput) {
   const bundle =
     typeof bundleInput === "string" ? JSON.parse(bundleInput) : bundleInput;
@@ -62,6 +68,7 @@ function normalizeImportedKeyBundle(bundleInput) {
   return bundle;
 }
 
+// Functions we need to store and load identity keys (in IndexedDB btw)
 function openIdentityDb() {
   return new Promise((resolve, reject) => {
     const request = window.indexedDB.open(
@@ -156,6 +163,7 @@ async function clearPersistedIdentityKeyPair() {
   db.close();
 }
 
+// Utils to generate key fingerprints
 async function getPublicKeyFingerprint(publicKeyBase64 = exportedPublicKey) {
   if (!publicKeyBase64) {
     throw new Error("Public key not available.");
@@ -167,11 +175,12 @@ async function getPublicKeyFingerprint(publicKeyBase64 = exportedPublicKey) {
   );
 
   return [...new Uint8Array(digest)]
-    .slice(0, 16)
+    .slice(0, PUBLIC_KEY_FINGERPRINT_BYTES)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join(":");
 }
 
+// Functions to encrypt and decrypt key backups (needs the passphrase)
 async function derivePassphraseWrappingKey(passphrase, saltBuffer) {
   if (!passphrase) {
     throw new Error("Passphrase is required.");
@@ -179,7 +188,7 @@ async function derivePassphraseWrappingKey(passphrase, saltBuffer) {
 
   const keyMaterial = await window.crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(passphrase),
+    textEncoder.encode(passphrase),
     { name: "PBKDF2" },
     false,
     ["deriveKey"],
@@ -203,24 +212,28 @@ async function derivePassphraseWrappingKey(passphrase, saltBuffer) {
 }
 
 async function encryptTextWithPassphrase(plaintext, passphrase) {
-  const salt = window.crypto.getRandomValues(new Uint8Array(16));
-  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const salt = window.crypto.getRandomValues(
+    new Uint8Array(PBKDF2_SALT_BYTES),
+  );
+  const nonce = window.crypto.getRandomValues(
+    new Uint8Array(AES_GCM_NONCE_BYTES),
+  );
   const wrappingKey = await derivePassphraseWrappingKey(passphrase, salt);
 
   const ciphertext = await window.crypto.subtle.encrypt(
     {
       name: "AES-GCM",
-      iv,
+      iv: nonce,
     },
     wrappingKey,
-    new TextEncoder().encode(plaintext),
+    textEncoder.encode(plaintext),
   );
 
   return {
     kdf: "PBKDF2",
     iterations: PBKDF2_ITERATIONS,
     saltBase64: arrayBufferToBase64(salt.buffer),
-    ivBase64: arrayBufferToBase64(iv.buffer),
+    ivBase64: arrayBufferToBase64(nonce.buffer),
     ciphertextBase64: arrayBufferToBase64(ciphertext),
   };
 }
@@ -235,7 +248,7 @@ async function decryptTextWithPassphrase(encryptedPayload, passphrase) {
   }
 
   const saltBuffer = base64ToArrayBuffer(encryptedPayload.saltBase64);
-  const iv = new Uint8Array(base64ToArrayBuffer(encryptedPayload.ivBase64));
+  const nonce = new Uint8Array(base64ToArrayBuffer(encryptedPayload.ivBase64));
   const ciphertextBuffer = base64ToArrayBuffer(
     encryptedPayload.ciphertextBase64,
   );
@@ -244,15 +257,16 @@ async function decryptTextWithPassphrase(encryptedPayload, passphrase) {
   const plaintextBuffer = await window.crypto.subtle.decrypt(
     {
       name: "AES-GCM",
-      iv,
+      iv: nonce,
     },
     wrappingKey,
     ciphertextBuffer,
   );
 
-  return new TextDecoder().decode(plaintextBuffer);
+  return textDecoder.decode(plaintextBuffer);
 }
 
+// Functions to create, import, and export identity key pairs
 async function generateECDHKeyPair() {
   ecdhKeyPair = await window.crypto.subtle.generateKey(
     {
@@ -402,8 +416,17 @@ async function importEncryptedIdentityKeyBundle(bundleInput, passphrase) {
   return importIdentityKeyBundle(decryptedBundleJson);
 }
 
+// Key exchange and deriving a session key (using ECDH and HKDF)
 async function importPeerPublicKey(publicKeyBase64) {
-  const rawPeerKey = base64ToArrayBuffer(publicKeyBase64);
+  if (
+    typeof publicKeyBase64 !== "string" ||
+    !publicKeyBase64.trim() ||
+    publicKeyBase64.length > MAX_PUBLIC_KEY_BASE64_LENGTH
+  ) {
+    throw new Error("Peer public key is invalid.");
+  }
+
+  const rawPeerKey = base64ToArrayBuffer(publicKeyBase64.trim());
 
   return window.crypto.subtle.importKey(
     "raw",
@@ -433,11 +456,8 @@ async function deriveSharedSecret(peerPublicKeyBase64) {
     256,
   );
 
-  sharedSecretBase64 = arrayBufferToBase64(sharedSecretBits);
-
   return {
     sharedSecretBits,
-    sharedSecretBase64,
   };
 }
 
@@ -450,8 +470,8 @@ async function deriveSessionKeyFromSharedSecret(sharedSecretBits, roomId) {
     ["deriveKey"],
   );
 
-  const salt = new TextEncoder().encode(roomId);
-  const info = new TextEncoder().encode("e2ee-chat-session-key");
+  const salt = textEncoder.encode(roomId);
+  const info = textEncoder.encode(HKDF_INFO);
 
   sessionKey = await window.crypto.subtle.deriveKey(
     {
@@ -465,16 +485,12 @@ async function deriveSessionKeyFromSharedSecret(sharedSecretBits, roomId) {
       name: "AES-GCM",
       length: 256,
     },
-    true,
+    false,
     ["encrypt", "decrypt"],
   );
 
-  const rawSessionKey = await window.crypto.subtle.exportKey("raw", sessionKey);
-  exportedSessionKey = arrayBufferToBase64(rawSessionKey);
-
   return {
     sessionKey,
-    sessionKeyBase64: exportedSessionKey,
   };
 }
 
@@ -483,52 +499,53 @@ async function deriveSharedSessionKey(peerPublicKeyBase64, roomId) {
   return deriveSessionKeyFromSharedSecret(sharedSecretBits, roomId);
 }
 
+// Encrypting and decrypting chat messages with AES-GCM
 async function encryptMessage(plaintext) {
   if (!sessionKey) {
     throw new Error("Session key not ready.");
   }
 
-  const iv = window.crypto.getRandomValues(new Uint8Array(12));
-  const encodedMessage = new TextEncoder().encode(plaintext);
+  const nonce = window.crypto.getRandomValues(
+    new Uint8Array(AES_GCM_NONCE_BYTES),
+  );
+  const encodedMessage = textEncoder.encode(plaintext);
 
   const ciphertextBuffer = await window.crypto.subtle.encrypt(
     {
       name: "AES-GCM",
-      iv,
+      iv: nonce,
     },
     sessionKey,
     encodedMessage,
   );
 
-  const ciphertext = arrayBufferToBase64(ciphertextBuffer);
-  const ivBase64 = arrayBufferToBase64(iv.buffer);
-
   return {
-    ciphertext,
-    iv: ivBase64,
+    ciphertext: arrayBufferToBase64(ciphertextBuffer),
+    nonce: arrayBufferToBase64(nonce.buffer),
   };
 }
 
-async function decryptMessage(ciphertextBase64, ivBase64) {
+async function decryptMessage(ciphertextBase64, nonceBase64) {
   if (!sessionKey) {
     throw new Error("Session key not ready.");
   }
 
   const ciphertextBuffer = base64ToArrayBuffer(ciphertextBase64);
-  const ivBuffer = base64ToArrayBuffer(ivBase64);
+  const nonceBuffer = base64ToArrayBuffer(nonceBase64);
 
   const plaintextBuffer = await window.crypto.subtle.decrypt(
     {
       name: "AES-GCM",
-      iv: new Uint8Array(ivBuffer),
+      iv: new Uint8Array(nonceBuffer),
     },
     sessionKey,
     ciphertextBuffer,
   );
 
-  return new TextDecoder().decode(plaintextBuffer);
+  return textDecoder.decode(plaintextBuffer);
 }
 
+// Getters for the current crypto state
 function getECDHKeyPair() {
   return ecdhKeyPair;
 }
@@ -537,6 +554,7 @@ function getPublicKey() {
   return exportedPublicKey;
 }
 
+// this exposes the crypto functions to the rest of the app
 window.e2eeCrypto = {
   generateECDHKeyPair,
   loadPersistedIdentityKeyPair,

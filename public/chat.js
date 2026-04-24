@@ -1,6 +1,8 @@
+// restoring the chat session state from the join page
 const currentUsername = sessionStorage.getItem("chatUsername");
 const currentRoom = sessionStorage.getItem("chatRoomId");
 
+// DOM elements
 const chatRoom = document.getElementById("chat-room");
 const chatUsername = document.getElementById("chat-username");
 const chatStatusBadge = document.getElementById("chat-status-badge");
@@ -14,10 +16,14 @@ const leaveRoomBtn = document.getElementById("leave-room-btn");
 const localFingerprintText = document.getElementById("local-fingerprint");
 const peerFingerprintText = document.getElementById("peer-fingerprint");
 const peerUsernameText = document.getElementById("peer-identity-username");
-const peerFingerprintStatusText = document.getElementById(
-  "peer-fingerprint-status",
-);
+const peerFingerprintStatusText = document.getElementById("peer-fingerprint-status");
 
+// payload size limits
+const MAX_INCOMING_CIPHERTEXT_LENGTH = 20_000;
+const MAX_INCOMING_NONCE_LENGTH = 100;
+const MAX_OUTGOING_MESSAGE_LENGTH = 2_000;
+
+// state (for the current chat session)
 let secureSessionReady = false;
 let localKeyReady = false;
 let pendingPeerKeyPayload = null;
@@ -27,6 +33,7 @@ let lastJoinedRoomId = null;
 let sendCounter = 0;
 let lastReceivedCounter = -1;
 
+// helpers for key fingerprints and to display the identity of the peer
 function getPeerFingerprintStorageKey() {
   return `knownPeerFingerprint:${currentRoom}`;
 }
@@ -77,12 +84,12 @@ async function renderPeerIdentity(username, publicKey) {
   } else if (knownFingerprint === fingerprint) {
     fingerprintStatus = "Known peer key";
   } else {
-    fingerprintStatus = "Warning: peer key changed";
+    fingerprintStatus = "Warning: Peer key changed";
 
     appendMessage({
       sender: "System",
-      text: "Warning: peer key changed for this room. Verify the fingerprint out of band.",
-      type: "theirs",
+      text: `Warning! ${username}'s key has changed. Verify the new fingerprint with them.`,
+      type: "system",
     });
   }
 
@@ -94,6 +101,7 @@ async function renderPeerIdentity(username, publicKey) {
   setPeerFingerprintStatus(fingerprintStatus);
 }
 
+// load the local identity key before starting ECDH
 async function ensureIdentityKeyReady() {
   const existingPublicKey = window.e2eeCrypto.getPublicKey();
 
@@ -113,10 +121,11 @@ async function ensureIdentityKeyReady() {
   );
 }
 
+// if someone opens /chat.html directly, we send them back to the join page
 if (!currentUsername || !currentRoom) {
   sessionStorage.removeItem("chatUsername");
   sessionStorage.removeItem("chatRoomId");
-  console.warn("Missing chat session state. Redirecting to join page.");
+  console.warn("Missing chat session state :( Redirecting to join page.");
   window.location.replace("/");
   throw new Error("Missing chat session state");
 }
@@ -124,6 +133,7 @@ if (!currentUsername || !currentRoom) {
 chatRoom.textContent = currentRoom;
 chatUsername.textContent = currentUsername;
 
+// some UI helpers for the chat state and messages
 function setChatStatus(mode) {
   if (!chatStatusBadge) return;
 
@@ -138,10 +148,6 @@ function setChatStatus(mode) {
 
   chatStatusBadge.textContent = "Connecting";
   chatStatusBadge.classList.add("connecting");
-}
-
-function getLastReceivedCounterKey() {
-  return `lastReceivedCounter:${currentRoom}`;
 }
 
 function scrollMessagesToBottom() {
@@ -223,13 +229,62 @@ function setComposerEnabled(enabled) {
   if (chatSendBtn) chatSendBtn.disabled = !enabled;
 }
 
+function validateEncryptedMessagePayload({ username, ciphertext, nonce }) {
+  if (
+    typeof username !== "string" ||
+    typeof ciphertext !== "string" ||
+    typeof nonce !== "string" ||
+    ciphertext.length > MAX_INCOMING_CIPHERTEXT_LENGTH ||
+    nonce.length > MAX_INCOMING_NONCE_LENGTH
+  ) {
+    throw new Error("Invalid encrypted message payload");
+  }
+}
+
+function validateDecryptedMessagePayload(payload) {
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    typeof payload.counter !== "number" ||
+    typeof payload.text !== "string"
+  ) {
+    throw new Error("Invalid decrypted message payload");
+  }
+}
+
+function handleReplayCheck(counter) {
+  if (counter > lastReceivedCounter) {
+    lastReceivedCounter = counter;
+    return true;
+  }
+
+  appendMessage({
+    sender: "System",
+    text: "Rejected possible replayed message.",
+    type: "system",
+  });
+  return false;
+}
+
+function validateOutgoingMessage(plaintext) {
+  if (plaintext.length > MAX_OUTGOING_MESSAGE_LENGTH) {
+    appendMessage({
+      sender: "System",
+      text: `Message is too long. Please keep it under ${MAX_OUTGOING_MESSAGE_LENGTH} characters.`,
+      type: "system",
+    });
+    return false;
+  }
+
+  return true;
+}
+
+// establish the AES-GCM session key from the peer public key
 async function deriveSessionFromPeer(username, publicKey) {
   await window.e2eeCrypto.deriveSharedSessionKey(publicKey, currentRoom);
 
   sendCounter = 0;
-  lastReceivedCounter = Number(
-    localStorage.getItem(getLastReceivedCounterKey()) ?? -1,
-  );
+  lastReceivedCounter = -1;
   secureSessionReady = true;
   lastDerivedPeerKey = publicKey;
 
@@ -237,10 +292,11 @@ async function deriveSessionFromPeer(username, publicKey) {
   setComposerEnabled(true);
 }
 
+// Socket.IO event handlers
 socket.on("connect", () => {
   setChatStatus("connecting");
   setComposerEnabled(false);
-  setSystemStatusMessage("Connected. Rejoining secure chat...");
+  setSystemStatusMessage("Connected. Joining secure chat...");
 
   socket.emit("join-room", {
     roomId: currentRoom,
@@ -277,8 +333,8 @@ socket.on("joined-room", async ({ roomId, username }) => {
 
     setSystemStatusMessage(
       isRejoiningSameRoom
-        ? "Rejoined room. Reusing identity key and establishing secure session..."
-        : "Joined room. Reusing identity key and establishing secure session...",
+        ? "Rejoined room. Reusing the identity key and establishing a secure session..."
+        : "Joined room. Using the identity key and establishing a secure session...",
     );
 
     lastJoinedRoomId = roomId;
@@ -319,7 +375,7 @@ socket.on("peer-public-key", async ({ username, publicKey }) => {
       return;
     }
 
-    setSystemStatusMessage("Peer key received. Establishing secure session...");
+    setSystemStatusMessage("Peer key received. Establishing a secure session...");
 
     await renderPeerIdentity(username, publicKey);
     await deriveSessionFromPeer(username, publicKey);
@@ -352,7 +408,7 @@ socket.on("user-left", async ({ username }) => {
 
   setChatStatus("connecting");
   setComposerEnabled(false);
-  setSystemStatusMessage("Peer left. Waiting for a secure peer to join...");
+  setSystemStatusMessage("The other user left the room :( Waiting for a user to join...");
 });
 
 socket.on("room-full", () => {
@@ -385,34 +441,17 @@ socket.on("error-message", (msg) => {
   });
 });
 
-socket.on("receive-encrypted-message", async ({ username, ciphertext, iv }) => {
+socket.on("receive-encrypted-message", async (encryptedMessage) => {
   try {
-    const decrypted = await window.e2eeCrypto.decryptMessage(ciphertext, iv);
+    validateEncryptedMessagePayload(encryptedMessage);
+
+    const { username, ciphertext, nonce } = encryptedMessage;
+    const decrypted = await window.e2eeCrypto.decryptMessage(ciphertext, nonce);
     const payload = JSON.parse(decrypted);
-    console.log("Received counter:", payload.counter);
 
-    if (
-      typeof payload !== "object" ||
-      typeof payload.counter !== "number" ||
-      typeof payload.text !== "string"
-    ) {
-      throw new Error("Invalid message payload");
-    }
+    validateDecryptedMessagePayload(payload);
 
-    if (payload.counter <= lastReceivedCounter) {
-      appendMessage({
-        sender: "System",
-        text: "Rejected possible replayed message.",
-        type: "system",
-      });
-      return;
-    }
-
-    lastReceivedCounter = payload.counter;
-    localStorage.setItem(
-      getLastReceivedCounterKey(),
-      String(lastReceivedCounter),
-    );
+    if (!handleReplayCheck(payload.counter)) return;
 
     appendMessage({
       sender: username,
@@ -429,7 +468,9 @@ socket.on("receive-encrypted-message", async ({ username, ciphertext, iv }) => {
   }
 });
 
+// user actions
 leaveRoomBtn?.addEventListener("click", () => {
+  sessionStorage.removeItem("chatUsername");
   sessionStorage.removeItem("chatRoomId");
 
   secureSessionReady = false;
@@ -442,7 +483,7 @@ leaveRoomBtn?.addEventListener("click", () => {
   }
 
   socket.disconnect();
-  window.location.href = "/";
+  window.location.replace("/");
 });
 
 chatForm?.addEventListener("submit", async (event) => {
@@ -451,6 +492,7 @@ chatForm?.addEventListener("submit", async (event) => {
   const plaintext = chatInput?.value.trim();
 
   if (!plaintext || !secureSessionReady) return;
+  if (!validateOutgoingMessage(plaintext)) return;
 
   try {
     const payload = {
@@ -458,14 +500,14 @@ chatForm?.addEventListener("submit", async (event) => {
       text: plaintext,
     };
 
-    const { ciphertext, iv } = await window.e2eeCrypto.encryptMessage(
+    const { ciphertext, nonce } = await window.e2eeCrypto.encryptMessage(
       JSON.stringify(payload),
     );
 
     socket.emit("send-encrypted-message", {
       roomId: currentRoom,
       ciphertext,
-      iv,
+      nonce,
     });
 
     appendMessage({

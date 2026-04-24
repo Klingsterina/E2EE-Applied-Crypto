@@ -4,14 +4,25 @@ const http = require("http");
 const crypto = require("crypto");
 const { Server } = require("socket.io");
 
+const PORT = Number(process.env.PORT) || 3000;
+const ROOM_ID_REGEX = /^[A-Za-z0-9_-]{22}$/;
+const USERNAME_REGEX = /^[A-Za-z0-9_-]{1,24}$/;
+const EMPTY_ROOM_TTL_MS = 30_000;
+const JOIN_WINDOW_MS = 60_000;
+const MAX_JOIN_ATTEMPTS = 10;
+const MAX_PUBLIC_KEY_LENGTH = 1_000;
+const MAX_CIPHERTEXT_LENGTH = 20_000;
+const MAX_NONCE_LENGTH = 100;
+const MESSAGE_WINDOW_MS = 1_000;
+const MAX_MESSAGES_PER_WINDOW = 10;
+const RATE_LIMIT_CLEANUP_MS = 60_000;
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   pingInterval: 25000,
   pingTimeout: 120000,
 });
-
-const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -23,15 +34,10 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-const ROOM_ID_REGEX = /^[A-Za-z0-9_-]{22}$/;
-const USERNAME_REGEX = /^[A-Za-z0-9_-]{1,24}$/;
 const issuedRooms = new Map();
-const EMPTY_ROOM_TTL_MS = 30_000;
 const pendingRoomDeletions = new Map();
-
-const JOIN_WINDOW_MS = 60_000;
-const MAX_JOIN_ATTEMPTS = 10;
 const joinAttempts = new Map();
+const messageAttempts = new Map();
 
 function normalizeUsername(username) {
   return username.trim().replace(/\s+/g, "_").slice(0, 24);
@@ -63,6 +69,38 @@ function isJoinRateLimited(socket) {
 
   return recentAttempts.length > MAX_JOIN_ATTEMPTS;
 }
+
+function isMessageRateLimited(socket) {
+  const key = socket.id;
+  const now = Date.now();
+
+  const attempts = messageAttempts.get(key) || [];
+  const recentAttempts = attempts.filter((ts) => now - ts < MESSAGE_WINDOW_MS);
+
+  recentAttempts.push(now);
+  messageAttempts.set(key, recentAttempts);
+
+  return recentAttempts.length > MAX_MESSAGES_PER_WINDOW;
+}
+
+function cleanupRateLimitMap(rateLimitMap, windowMs) {
+  const now = Date.now();
+
+  for (const [key, attempts] of rateLimitMap.entries()) {
+    const recentAttempts = attempts.filter((ts) => now - ts < windowMs);
+
+    if (recentAttempts.length === 0) {
+      rateLimitMap.delete(key);
+    } else {
+      rateLimitMap.set(key, recentAttempts);
+    }
+  }
+}
+
+setInterval(() => {
+  cleanupRateLimitMap(joinAttempts, JOIN_WINDOW_MS);
+  cleanupRateLimitMap(messageAttempts, MESSAGE_WINDOW_MS);
+}, RATE_LIMIT_CLEANUP_MS).unref();
 
 function cancelPendingRoomDeletion(roomId) {
   const timeoutId = pendingRoomDeletions.get(roomId);
@@ -220,6 +258,16 @@ io.on("connection", (socket) => {
     const normalizedRoomId = roomId.trim();
     const normalizedPublicKey = publicKey.trim();
 
+    if (!ROOM_ID_REGEX.test(normalizedRoomId)) {
+      socket.emit("error-message", "Invalid room ID.");
+      return;
+    }
+
+    if (normalizedPublicKey.length > MAX_PUBLIC_KEY_LENGTH) {
+      socket.emit("error-message", "Public key payload is too large.");
+      return;
+    }
+
     if (socket.data.roomId !== normalizedRoomId) {
       socket.emit("error-message", "You are not in this room.");
       return;
@@ -250,20 +298,37 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("send-encrypted-message", ({ roomId, ciphertext, iv } = {}) => {
+  socket.on("send-encrypted-message", ({ roomId, ciphertext, nonce } = {}) => {
     if (
       typeof roomId !== "string" ||
       typeof ciphertext !== "string" ||
-      typeof iv !== "string" ||
+      typeof nonce !== "string" ||
       !roomId.trim() ||
       !ciphertext.trim() ||
-      !iv.trim()
+      !nonce.trim()
     ) {
-      socket.emit("error-message", "roomId, ciphertext and iv are required.");
+      socket.emit("error-message", "roomId, ciphertext and nonce are required.");
+      return;
+    }
+
+    if (isMessageRateLimited(socket)) {
+      socket.emit("error-message", "Too many messages. Slow down a bit.");
       return;
     }
 
     const normalizedRoomId = roomId.trim();
+    const normalizedCiphertext = ciphertext.trim();
+    const normalizedNonce = nonce.trim();
+
+    if (normalizedCiphertext.length > MAX_CIPHERTEXT_LENGTH) {
+      socket.emit("error-message", "Ciphertext payload is too large.");
+      return;
+    }
+
+    if (normalizedNonce.length > MAX_NONCE_LENGTH) {
+      socket.emit("error-message", "Nonce payload is too large.");
+      return;
+    }
 
     if (socket.data.roomId !== normalizedRoomId) {
       socket.emit("error-message", "You are not in this room.");
@@ -272,8 +337,8 @@ io.on("connection", (socket) => {
 
     socket.to(normalizedRoomId).emit("receive-encrypted-message", {
       username: socket.data.username,
-      ciphertext: ciphertext.trim(),
-      iv: iv.trim(),
+      ciphertext: normalizedCiphertext,
+      nonce: normalizedNonce,
     });
   });
 
@@ -294,6 +359,8 @@ io.on("connection", (socket) => {
     if (roomId) {
       scheduleRoomDeletionIfEmpty(roomId);
     }
+
+    messageAttempts.delete(socket.id);
   });
 });
 

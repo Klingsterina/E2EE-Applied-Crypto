@@ -1,3 +1,4 @@
+// the DOM elements we'll be working with (vanilla JS whyyy...)
 const generateKeyBtn = document.getElementById("generate-key-btn");
 const downloadKeyBtn = document.getElementById("download-key-btn");
 const importKeyBtn = document.getElementById("import-key-btn");
@@ -15,9 +16,12 @@ const identityPublicKeyText = document.getElementById("identity-public-key");
 const modeTabs = document.querySelectorAll(".mode-tab");
 const modePanels = document.querySelectorAll(".mode-panel");
 
+// constants for validation
 const ROOM_ID_REGEX = /^[A-Za-z0-9_-]{22}$/;
 const USERNAME_REGEX = /^[A-Za-z0-9_-]{1,24}$/;
+const MAX_KEY_FILE_BYTES = 50_000;
 
+// some UI helpers
 function setRoomMode(mode) {
   modeTabs.forEach((tab) => {
     const isActive = tab.dataset.mode === mode;
@@ -61,6 +65,13 @@ function setKeyStatus(message) {
   keyStatusText.textContent = message;
 }
 
+function requireIdentityKey(message) {
+  if (hasIdentityKey) return true;
+  setStatus(message);
+  return false;
+}
+
+// to restore saved join form state
 const savedUsername = sessionStorage.getItem("chatUsername");
 const savedRoomId = sessionStorage.getItem("chatRoomId");
 
@@ -72,6 +83,7 @@ if (savedRoomId && roomInput) {
   roomInput.value = savedRoomId;
 }
 
+// setup for the identity key
 let hasIdentityKey = false;
 
 async function renderIdentityInfo(publicKey) {
@@ -132,6 +144,7 @@ async function initializeIdentityKeyState() {
 
 initializeIdentityKeyState();
 
+// generating an identity key and handlers for backup & import
 generateKeyBtn?.addEventListener("click", async () => {
   try {
     setKeyStatus("Generating identity key...");
@@ -209,6 +222,12 @@ importKeyFileInput?.addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
 
+  if (file.size > MAX_KEY_FILE_BYTES) {
+    setKeyStatus("Key file is too large.");
+    event.target.value = "";
+    return;
+  }
+
   try {
     const text = await file.text();
     const passphrase = window.prompt(
@@ -242,6 +261,7 @@ importKeyFileInput?.addEventListener("change", async (event) => {
   event.target.value = "";
 });
 
+// room creation and join handlers
 createRoomBtn?.addEventListener("click", () => {
   const username = normalizeUsername(usernameInput?.value || "");
   const usernameError = validateUsername(username);
@@ -251,15 +271,11 @@ createRoomBtn?.addEventListener("click", () => {
     return;
   }
 
-  if (!username) {
-    setStatus("Username is required.");
-    return;
-  }
-
-  if (!hasIdentityKey) {
-    setStatus(
+  if (
+    !requireIdentityKey(
       "You must generate or import an identity key before creating a room.",
-    );
+    )
+  ) {
     return;
   }
 
@@ -267,17 +283,13 @@ createRoomBtn?.addEventListener("click", () => {
   socket.emit("create-room");
 });
 
+// socket event handlers
 socket.on("room-created", ({ roomId }) => {
   const username = normalizeUsername(usernameInput?.value || "");
   const usernameError = validateUsername(username);
 
   if (usernameError) {
     setStatus(usernameError);
-    return;
-  }
-
-  if (!username) {
-    setStatus("Username is required.");
     return;
   }
 
@@ -288,7 +300,7 @@ socket.on("room-created", ({ roomId }) => {
     roomInput.value = roomId;
   }
 
-  window.location.href = "/chat.html";
+  window.location.replace("/chat.html");
 });
 
 joinBtn?.addEventListener("click", () => {
@@ -301,8 +313,8 @@ joinBtn?.addEventListener("click", () => {
     return;
   }
 
-  if (!username || !roomId) {
-    setStatus("Username and room code are required.");
+  if (!roomId) {
+    setStatus("Room code is required.");
     return;
   }
 
@@ -311,8 +323,11 @@ joinBtn?.addEventListener("click", () => {
     return;
   }
 
-  if (!hasIdentityKey) {
-    setStatus("You must generate or import an identity key before joining.");
+  if (
+    !requireIdentityKey(
+      "You must generate or import an identity key before joining.",
+    )
+  ) {
     return;
   }
 
@@ -327,7 +342,7 @@ joinBtn?.addEventListener("click", () => {
     sessionStorage.setItem("chatUsername", username);
     sessionStorage.setItem("chatRoomId", roomId);
 
-    window.location.href = "/chat.html";
+    window.location.replace("/chat.html");
   });
 });
 
