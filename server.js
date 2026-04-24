@@ -24,6 +24,7 @@ app.get("/health", (_req, res) => {
 });
 
 const ROOM_ID_REGEX = /^[A-Za-z0-9_-]{22}$/;
+const USERNAME_REGEX = /^[A-Za-z0-9_-]{1,24}$/;
 const issuedRooms = new Map();
 const EMPTY_ROOM_TTL_MS = 30_000;
 const pendingRoomDeletions = new Map();
@@ -31,6 +32,10 @@ const pendingRoomDeletions = new Map();
 const JOIN_WINDOW_MS = 60_000;
 const MAX_JOIN_ATTEMPTS = 10;
 const joinAttempts = new Map();
+
+function normalizeUsername(username) {
+  return username.trim().replace(/\s+/g, "_").slice(0, 24);
+}
 
 function generateRoomId() {
   return crypto.randomBytes(16).toString("base64url");
@@ -149,7 +154,15 @@ io.on("connection", (socket) => {
     }
 
     const normalizedRoomId = roomId.trim();
-    const normalizedUsername = username.trim();
+    const normalizedUsername = normalizeUsername(username);
+
+    if (!USERNAME_REGEX.test(normalizedUsername)) {
+      socket.emit(
+        "error-message",
+        "Invalid username. Use letters, numbers, _ or -, max 24 characters.",
+      );
+      return;
+    }
 
     if (!ROOM_ID_REGEX.test(normalizedRoomId)) {
       socket.emit("error-message", "Invalid room ID.");

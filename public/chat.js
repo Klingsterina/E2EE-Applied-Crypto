@@ -14,7 +14,9 @@ const leaveRoomBtn = document.getElementById("leave-room-btn");
 const localFingerprintText = document.getElementById("local-fingerprint");
 const peerFingerprintText = document.getElementById("peer-fingerprint");
 const peerUsernameText = document.getElementById("peer-identity-username");
-const peerFingerprintStatusText = document.getElementById("peer-fingerprint-status");
+const peerFingerprintStatusText = document.getElementById(
+  "peer-fingerprint-status",
+);
 
 let secureSessionReady = false;
 let localKeyReady = false;
@@ -22,6 +24,8 @@ let pendingPeerKeyPayload = null;
 let lastDerivedPeerKey = null;
 let systemStatusRow = null;
 let lastJoinedRoomId = null;
+let sendCounter = 0;
+let lastReceivedCounter = -1;
 
 function getPeerFingerprintStorageKey() {
   return `knownPeerFingerprint:${currentRoom}`;
@@ -136,6 +140,10 @@ function setChatStatus(mode) {
   chatStatusBadge.classList.add("connecting");
 }
 
+function getLastReceivedCounterKey() {
+  return `lastReceivedCounter:${currentRoom}`;
+}
+
 function scrollMessagesToBottom() {
   if (!chatMessages) return;
   chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -218,6 +226,10 @@ function setComposerEnabled(enabled) {
 async function deriveSessionFromPeer(username, publicKey) {
   await window.e2eeCrypto.deriveSharedSessionKey(publicKey, currentRoom);
 
+  sendCounter = 0;
+  lastReceivedCounter = Number(
+    localStorage.getItem(getLastReceivedCounterKey()) ?? -1,
+  );
   secureSessionReady = true;
   lastDerivedPeerKey = publicKey;
 
@@ -375,16 +387,40 @@ socket.on("error-message", (msg) => {
 
 socket.on("receive-encrypted-message", async ({ username, ciphertext, iv }) => {
   try {
-    const plaintext = await window.e2eeCrypto.decryptMessage(ciphertext, iv);
+    const decrypted = await window.e2eeCrypto.decryptMessage(ciphertext, iv);
+    const payload = JSON.parse(decrypted);
+    console.log("Received counter:", payload.counter);
+
+    if (
+      typeof payload !== "object" ||
+      typeof payload.counter !== "number" ||
+      typeof payload.text !== "string"
+    ) {
+      throw new Error("Invalid message payload");
+    }
+
+    if (payload.counter <= lastReceivedCounter) {
+      appendMessage({
+        sender: "System",
+        text: "Rejected possible replayed message.",
+        type: "system",
+      });
+      return;
+    }
+
+    lastReceivedCounter = payload.counter;
+    localStorage.setItem(
+      getLastReceivedCounterKey(),
+      String(lastReceivedCounter),
+    );
 
     appendMessage({
       sender: username,
-      text: plaintext,
+      text: payload.text,
       type: "theirs",
     });
   } catch (error) {
     console.error("Failed to decrypt incoming message:", error);
-
     appendMessage({
       sender: "System",
       text: "Failed to decrypt incoming message.",
@@ -417,8 +453,14 @@ chatForm?.addEventListener("submit", async (event) => {
   if (!plaintext || !secureSessionReady) return;
 
   try {
-    const { ciphertext, iv } =
-      await window.e2eeCrypto.encryptMessage(plaintext);
+    const payload = {
+      counter: sendCounter++,
+      text: plaintext,
+    };
+
+    const { ciphertext, iv } = await window.e2eeCrypto.encryptMessage(
+      JSON.stringify(payload),
+    );
 
     socket.emit("send-encrypted-message", {
       roomId: currentRoom,

@@ -15,6 +15,9 @@ const identityPublicKeyText = document.getElementById("identity-public-key");
 const modeTabs = document.querySelectorAll(".mode-tab");
 const modePanels = document.querySelectorAll(".mode-panel");
 
+const ROOM_ID_REGEX = /^[A-Za-z0-9_-]{22}$/;
+const USERNAME_REGEX = /^[A-Za-z0-9_-]{1,24}$/;
+
 function setRoomMode(mode) {
   modeTabs.forEach((tab) => {
     const isActive = tab.dataset.mode === mode;
@@ -36,7 +39,17 @@ modeTabs.forEach((tab) => {
   });
 });
 
-const ROOM_ID_REGEX = /^[A-Za-z0-9_-]{22}$/;
+function normalizeUsername(username) {
+  return username.trim().replace(/\s+/g, "_").slice(0, 24);
+}
+
+function validateUsername(username) {
+  if (!username) return "Username is required.";
+  if (!USERNAME_REGEX.test(username)) {
+    return "Username can only use letters, numbers, _ or - and must be max 24 characters.";
+  }
+  return "";
+}
 
 function setStatus(message) {
   if (!statusText) return;
@@ -229,7 +242,13 @@ importKeyFileInput?.addEventListener("change", async (event) => {
 });
 
 createRoomBtn?.addEventListener("click", () => {
-  const username = usernameInput?.value.trim();
+  const username = normalizeUsername(usernameInput?.value || "");
+  const usernameError = validateUsername(username);
+
+  if (usernameError) {
+    setStatus(usernameError);
+    return;
+  }
 
   if (!username) {
     setStatus("Username is required.");
@@ -248,7 +267,13 @@ createRoomBtn?.addEventListener("click", () => {
 });
 
 socket.on("room-created", ({ roomId }) => {
-  const username = usernameInput?.value.trim();
+  const username = normalizeUsername(usernameInput?.value || "");
+  const usernameError = validateUsername(username);
+
+  if (usernameError) {
+    setStatus(usernameError);
+    return;
+  }
 
   if (!username) {
     setStatus("Username is required.");
@@ -266,8 +291,14 @@ socket.on("room-created", ({ roomId }) => {
 });
 
 joinBtn?.addEventListener("click", () => {
-  const username = usernameInput?.value.trim();
+  const username = normalizeUsername(usernameInput?.value || "");
+  const usernameError = validateUsername(username);
   const roomId = roomInput?.value.trim();
+
+  if (usernameError) {
+    setStatus(usernameError);
+    return;
+  }
 
   if (!username || !roomId) {
     setStatus("Username and room code are required.");
